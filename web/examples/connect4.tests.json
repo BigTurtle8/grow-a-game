@@ -1,0 +1,245 @@
+[
+  {
+    "name": "starts as Red's empty board",
+    "steps": [
+      {
+        "do": "expect",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "state.turn === 1 && state.grid.flat().every((cell) => cell === 0)",
+        "description": "Red to move on an empty board"
+      }
+    ]
+  },
+  {
+    "name": "out-of-turn drop is ignored",
+    "steps": [
+      {
+        "do": "select",
+        "player": 2,
+        "control": "column",
+        "direction": "",
+        "index": 3,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Yellow tries to move first"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.2,
+        "expression": "",
+        "description": "let any illegal animation finish"
+      },
+      {
+        "do": "expect",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "state.turn === 1 && state.grid.flat().every((cell) => cell === 0)",
+        "description": "board and turn unchanged"
+      }
+    ]
+  },
+  {
+    "name": "four in a column wins for Red",
+    "steps": [
+      {
+        "do": "select",
+        "player": 1,
+        "control": "column",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Red column 1"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.6,
+        "expression": "",
+        "description": "piece lands"
+      },
+      {
+        "do": "select",
+        "player": 2,
+        "control": "column",
+        "direction": "",
+        "index": 1,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Yellow column 2"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.6,
+        "expression": "",
+        "description": "piece lands"
+      },
+      {
+        "do": "select",
+        "player": 1,
+        "control": "column",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Red column 1"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.6,
+        "expression": "",
+        "description": "piece lands"
+      },
+      {
+        "do": "select",
+        "player": 2,
+        "control": "column",
+        "direction": "",
+        "index": 1,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Yellow column 2"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.6,
+        "expression": "",
+        "description": "piece lands"
+      },
+      {
+        "do": "select",
+        "player": 1,
+        "control": "column",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Red column 1"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.6,
+        "expression": "",
+        "description": "piece lands"
+      },
+      {
+        "do": "select",
+        "player": 2,
+        "control": "column",
+        "direction": "",
+        "index": 1,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Yellow column 2"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.6,
+        "expression": "",
+        "description": "piece lands"
+      },
+      {
+        "do": "select",
+        "player": 1,
+        "control": "column",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "",
+        "description": "Red fourth in column 1"
+      },
+      {
+        "do": "wait",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0.7,
+        "expression": "",
+        "description": "win check after drop"
+      },
+      {
+        "do": "expect",
+        "player": 1,
+        "control": "",
+        "direction": "",
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "seconds": 0,
+        "expression": "Boolean(state.winLine) && state.winLine.length >= 4",
+        "description": "Red has four in a row"
+      }
+    ]
+  }
+]

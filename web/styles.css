@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Press+Start+2P&family=Space+Grotesk:wght@400;600;700&display=swap");
 
 :root {
   color-scheme: dark;
@@ -47,6 +47,9 @@ textarea:focus { border-color: var(--acid); }
 .result { padding: 2rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
 .result h2 { margin: 0; font-size: 2.4rem; }
 .result #transcript { color: #999b91; }
+.quality { margin: 1rem 0 0; color: var(--acid); font: .8rem "DM Mono"; }
+.quality.warn { color: #ffb86b; }
+.design { max-height: 9rem; overflow: auto; margin: .8rem 0 0; padding: .8rem; color: #8c8e84; background: #10110e; font: .72rem "DM Mono"; white-space: pre-wrap; }
 .launch-grid { display: grid; gap: .7rem; }
 .launch { padding: 1.1rem; display: flex; gap: 1rem; border: 1px solid var(--line); text-decoration: none; }
 .launch:hover, .launch.primary { border-color: var(--acid); }
@@ -81,6 +84,7 @@ textarea:focus { border-color: var(--acid); }
 
 .game-page { overflow: hidden; }
 #game, #game canvas { width: 100vw; height: 100vh; display: block; }
+#game canvas { image-rendering: pixelated; }
 .game-hud { position: fixed; inset: 0 0 auto; z-index: 2; padding: 14px 18px; display: flex; gap: 20px; align-items: center; background: linear-gradient(#000b, transparent); pointer-events: none; }
 .game-hud span { margin-left: auto; color: var(--acid); font: .7rem "DM Mono"; }
 .game-hud a { pointer-events: auto; font: .7rem "DM Mono"; }

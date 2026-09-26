@@ -14,12 +14,13 @@ writes a new game for any idea.
 
 ## How games are built
 
-Grok writes the whole game as JavaScript, but on top of a tested runtime, `web/kit.js`. The kit
-owns everything that used to break: the game loop, scaling a 1280x720 canvas to any screen,
-controller input, HUD, game over and restart, timers, and loading online sprites (Pokémon via
-PokeAPI, playing cards, Twemoji, or any image URL) through the caching proxy at `/api/asset`.
-Failed images fall back to an emoji so a bad URL never breaks a game. The instructions Grok
-receives are in `web/game-generator-prompt.txt`, plus `web/examples/connect4.js` as a reference.
+A named game (chess, Connect Four, and so on) is built as that game, using catalog sprites
+such as Lichess pieces, Pokémon, and playing cards. A vague or personal idea is an original
+small game built from the details in the sentence, not a copy of an existing title.
+
+A short headless check (`app/tester.py`) boots the game, fuzzes the controllers, and runs a
+few scenario tests. One fix round runs if that check fails. If the game cannot even start, it
+is rewritten once.
 
 Each game designs its own phone controller from `dpad`, `joystick`, `button`, and `choice` (a grid
 of labeled options such as Connect Four columns or battle moves), and can swap layouts mid-game

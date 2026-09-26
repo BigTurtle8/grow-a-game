@@ -3,6 +3,8 @@
 // generated code only has to describe the game itself.
 
 const gameId = location.pathname.split("/").filter(Boolean).at(-1);
+const params = new URLSearchParams(location.search);
+const TEST_MODE = params.has("test");
 const AUTO_RESTART_SECONDS = 12;
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 const KEYBOARD = {
@@ -78,7 +80,8 @@ export async function boot() {
     defaultLayouts[player] = controller?.[`player${player}`] ?? [];
   }
   layouts = structuredClone(defaultLayouts);
-  connect();
+  if (TEST_MODE) installTestApi();
+  else connect();
   addEventListener("keydown", (event) => onKey(event, true));
   addEventListener("keyup", (event) => onKey(event, false));
 
@@ -115,11 +118,16 @@ async function setup() {
   addEventListener("resize", resize);
   resize();
   restart();
+  if (TEST_MODE) {
+    window.__kit.ready = true;
+    return;
+  }
   lastFrame = performance.now();
   requestAnimationFrame(frame);
 }
 
 function restart() {
+  if (TEST_MODE) window.__kit.stats.restarts += 1;
   timers = [];
   held.clear();
   overTime = 0;
@@ -146,6 +154,10 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
+  tick(dt, true);
+}
+
+function tick(dt, shouldDraw) {
   if (phase === "broken") return;
   try {
     if (phase === "playing") {
@@ -160,7 +172,7 @@ function frame(now) {
         return;
       }
     }
-    render();
+    if (shouldDraw) render();
   } catch (error) {
     fail(errorInfo(error, phase === "playing" ? "update/draw" : phase));
   }
@@ -178,7 +190,7 @@ function render() {
     context.clip();
     context.fillStyle = definition.background ?? "#11120f";
     context.fillRect(0, 0, g.width, g.height);
-    context.imageSmoothingEnabled = true;
+    context.imageSmoothingEnabled = false;
     context.save();
     definition.draw?.(g, context);
     context.restore();
@@ -264,6 +276,7 @@ function createApi(keep) {
     },
     gameOver(title, subtitle = "") {
       if (phase !== "playing") return;
+      if (TEST_MODE) window.__kit.stats.gameOvers.push(`${title} ${subtitle}`.trim());
       phase = "over";
       overTime = 0;
       showOverlay(title, subtitle, restartHint());
@@ -296,6 +309,14 @@ function createApi(keep) {
       return loadSprite(`https://deckofcardsapi.com/static/img/${clean}.png`, clean);
     },
     cardBack: () => loadSprite("https://deckofcardsapi.com/static/img/back.png", "🂠"),
+    chessPiece(code) {
+      const clean = String(code);
+      const symbols = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙" };
+      return loadSprite(
+        `https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/cburnett/${clean}.svg`,
+        symbols[clean[1]] ?? clean,
+      );
+    },
 
     drawSprite(sprite, x, y, width, height, options = {}) {
       const target = context;
@@ -311,7 +332,7 @@ function createApi(keep) {
       }
       target.save();
       if (options.alpha !== undefined) target.globalAlpha = options.alpha;
-      target.imageSmoothingEnabled = options.smooth ?? !(w > sprite.width * 1.5);
+      target.imageSmoothingEnabled = options.smooth ?? false;
       if (options.flip || options.rotate) {
         target.translate(left + w / 2, top + h / 2);
         if (options.rotate) target.rotate(options.rotate);
@@ -327,7 +348,7 @@ function createApi(keep) {
       if (!target) return;
       const size = options.size ?? 28;
       target.save();
-      target.font = `${options.weight ?? 600} ${size}px ${options.font ?? '"Space Grotesk", sans-serif'}`;
+      target.font = `${options.weight ?? 400} ${size}px ${options.font ?? '"Press Start 2P", monospace'}`;
       target.textAlign = options.align ?? "center";
       target.textBaseline = options.baseline ?? "middle";
       if (options.stroke) {
@@ -561,6 +582,7 @@ function send(message) {
 }
 
 function sendLayout(player) {
+  if (TEST_MODE) window.__kit.stats.layoutsSent += 1;
   send({ type: "layout", player, controls: layouts[player] ?? [] });
   if (tells[player]) send({ type: "status", player, text: tells[player] });
 }
@@ -711,6 +733,10 @@ function fail(info) {
   if (phase === "broken") return;
   phase = "broken";
   console.error("[kit] game error", info);
+  if (TEST_MODE) {
+    window.__kit.errors.push(info);
+    return;
+  }
   showOverlay("Fixing a bug…", info.message, "The game hit an error. Asking the AI to repair it.", true);
   if (errorReported) {
     showManualRestart(info.message);
@@ -765,4 +791,170 @@ async function fetchJson(url) {
 function toAxis(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(-1, Math.min(1, number)) : 0;
+}
+
+// ---------- automated testing (?test=1) ----------
+// The generation pipeline drives games headlessly through window.__kit: time only advances
+// through step(), randomness is seeded, and errors are recorded instead of triggering repair.
+
+function installTestApi() {
+  let seed = (Number(params.get("seed")) || 1) >>> 0;
+  Math.random = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let value = seed;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const test = {
+    ready: false,
+    errors: [],
+    stats: { restarts: 0, gameOvers: [], layoutsSent: 0 },
+    step(seconds, drawEvery = 1) {
+      const frames = Math.max(1, Math.round(seconds * 60));
+      for (let index = 0; index < frames && phase !== "broken"; index++) {
+        tick(1 / 60, index % drawEvery === drawEvery - 1 || index === frames - 1);
+      }
+      return test.errors.length;
+    },
+    send(message) {
+      handleMessage({ type: "input", ...message });
+      return test.errors.length;
+    },
+    restart() {
+      if (!definition) return false;
+      restart();
+      return true;
+    },
+    phase: () => phase,
+    players: () => playerCount,
+    layouts: () => structuredClone(layouts),
+    tells: () => ({ ...tells }),
+    snapshot: () => snapshot(g?.state),
+    check(expression) {
+      const evaluate = new Function("g", "state", `"use strict"; return (${expression});`);
+      return Boolean(evaluate(g, g?.state));
+    },
+    assets: () => [...spriteCache.values()].map(({ url, ready, failed }) => ({ url, ready, failed })),
+    text: () => ({
+      status: dom.status.textContent,
+      scores: dom.scores.innerText,
+      overlay: dom.overlay.classList.contains("hidden") ? "" : dom.overlay.innerText,
+    }),
+    distinctColors() {
+      if (!context) return -1;
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+      const colors = new Set();
+      for (let index = 0; index < data.length; index += 4 * 211) {
+        colors.add(`${data[index] >> 4},${data[index + 1] >> 4},${data[index + 2] >> 4}`);
+      }
+      return colors.size;
+    },
+    idleChangeRate(frames = 30) {
+      let changes = 0;
+      let previous = stateHash();
+      for (let index = 0; index < frames && phase === "playing"; index++) {
+        tick(1 / 60, false);
+        const current = stateHash();
+        if (current !== previous) changes += 1;
+        previous = current;
+      }
+      return changes / frames;
+    },
+    fuzz(iterations = 1500, invalidRate = 0.12) {
+      const trail = [];
+      const firstError = test.errors.length;
+      let changed = 0;
+      let run = 0;
+      for (; run < iterations && phase !== "broken"; run++) {
+        const player = 1 + Math.floor(Math.random() * playerCount);
+        const before = stateHash();
+        for (const action of randomActions(player, Math.random() < invalidRate)) {
+          if (action.wait) test.step(action.wait, 4);
+          else {
+            trail.push(action);
+            if (trail.length > 20) trail.shift();
+            test.send(action);
+          }
+          if (phase === "broken") break;
+        }
+        tick(1 / 60, false);
+        if (stateHash() !== before) changed += 1;
+        test.step(0.02 + Math.random() * 0.3, 6);
+      }
+      return { run, changed, errors: test.errors.slice(firstError), trail, gameOvers: test.stats.gameOvers.length };
+    },
+  };
+  window.__kit = test;
+}
+
+function randomActions(player, invalid) {
+  const layout = (layouts[player] ?? []).filter((control) => control && control.type);
+  const pick = (items) => items[Math.floor(Math.random() * items.length)];
+  const hold = () => ({ wait: 0.03 + Math.random() * 0.4 });
+  if (invalid || !layout.length) {
+    const choice = layout.find((control) => control.type === "choice");
+    return pick([
+      [{ player, control: "not_a_control", kind: "press" }, { player, control: "not_a_control", kind: "release" }],
+      [{ player, control: choice?.id ?? "choice", kind: "select", value: 99, option: "stale" }],
+      [{ player, control: choice?.id ?? "choice", kind: "select", value: -1, option: "stale" }],
+      [{ player, control: layout[0]?.id ?? "a", kind: "release" }],
+      [{ player, control: "move", kind: "press", direction: "up", value: { x: 0, y: -1 } }],
+    ]);
+  }
+  const control = pick(layout);
+  const id = control.id;
+  if (control.type === "button") {
+    return [{ player, control: id, kind: "press", value: true }, hold(), { player, control: id, kind: "release", value: false }];
+  }
+  if (control.type === "dpad") {
+    const direction = pick(Object.keys(DIRECTION_VECTORS));
+    const value = DIRECTION_VECTORS[direction];
+    return [
+      { player, control: id, kind: "press", direction, value },
+      hold(),
+      { player, control: id, kind: "release", direction, value },
+    ];
+  }
+  if (control.type === "choice") {
+    const options = control.options ?? [];
+    const index = Math.floor(Math.random() * Math.max(1, options.length));
+    return [{ player, control: id, kind: "select", value: index, option: String(options[index] ?? "") }];
+  }
+  const angle = Math.random() * Math.PI * 2;
+  return [
+    { player, control: id, kind: "move", value: { x: Math.cos(angle), y: Math.sin(angle) } },
+    hold(),
+    { player, control: id, kind: "move", value: { x: 0, y: 0 } },
+  ];
+}
+
+function stateHash() {
+  try {
+    return JSON.stringify(snapshot(g?.state));
+  } catch {
+    return String(Math.random());
+  }
+}
+
+function snapshot(value, depth = 0, seen = new WeakSet()) {
+  if (typeof value === "function" || typeof value === "symbol") return undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : String(value);
+  if (value === null || typeof value !== "object") return value;
+  if (depth > 7) return "…";
+  if (seen.has(value)) return "[ref]";
+  seen.add(value);
+  if (value instanceof Node || value instanceof ImageBitmap) return `[${value.constructor.name}]`;
+  if (value.isObject3D || value.isTexture || value.isMaterial || value.isBufferGeometry) return "[three]";
+  if ("image" in value && "ready" in value && "url" in value) return `[sprite ${value.url}]`;
+  if (Array.isArray(value)) return value.slice(0, 400).map((item) => snapshot(item, depth + 1, seen) ?? null);
+  if (value instanceof Map) return snapshot(Object.fromEntries(value), depth, seen);
+  if (value instanceof Set) return snapshot([...value], depth, seen);
+  const result = {};
+  for (const [key, item] of Object.entries(value).slice(0, 200)) {
+    const copy = snapshot(item, depth + 1, seen);
+    if (copy !== undefined) result[key] = copy;
+  }
+  return result;
 }

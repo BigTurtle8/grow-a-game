@@ -116,6 +116,25 @@ async function showResult(job) {
   statusPanel.classList.add("hidden");
   result.classList.remove("hidden");
   document.querySelector("#transcript").textContent = `“${job.transcript}”`;
+  const quality = job.quality;
+  const qualityLine = document.querySelector("#quality");
+  if (quality && quality.checks_total) {
+    const failed = (quality.known_issues || []).length;
+    qualityLine.textContent = failed
+      ? `Passed ${quality.checks_passed}/${quality.checks_total} automated checks after ${quality.rounds || 1} test rounds.`
+      : `Passed all ${quality.checks_total} automated checks after researching how this game is usually played.`;
+    qualityLine.classList.toggle("warn", Boolean(failed));
+    qualityLine.classList.remove("hidden");
+  } else {
+    qualityLine.classList.add("hidden");
+  }
+  const design = document.querySelector("#design");
+  if (job.design) {
+    design.textContent = job.design.split("\n").slice(0, 8).join("\n");
+    design.classList.remove("hidden");
+  } else {
+    design.classList.add("hidden");
+  }
   document.querySelector("#game-link").href = job.game_url;
   document.querySelector("#p1-link").href = job.player1_url;
   document.querySelector("#p2-link").href = job.player2_url;
