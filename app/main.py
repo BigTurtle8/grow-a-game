@@ -28,7 +28,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app import tester
+from app import art, tester
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -36,18 +36,19 @@ WEB_DIR = ROOT / "web"
 GAMES_DIR = ROOT / "games"
 UPLOADS_DIR = ROOT / ".uploads"
 ASSET_CACHE_DIR = ROOT / ".cache" / "assets"
+BRAND_LOGO_PATH = WEB_DIR / "brand-logo.png"
 for directory in (GAMES_DIR, UPLOADS_DIR, ASSET_CACHE_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
 XAI_API_KEY = os.getenv("XAI_API_KEY")
 XAI_STT_MODEL = os.getenv("XAI_STT_MODEL", "grok-voice-transcribe-2.0")
 XAI_GAME_MODEL = os.getenv("XAI_GAME_MODEL", "grok-4.6")
-XAI_REASONING_EFFORT = os.getenv("XAI_REASONING_EFFORT", "high")
+XAI_REASONING_EFFORT = os.getenv("XAI_REASONING_EFFORT", "low")
 SELF_URL = os.getenv("SELF_URL", f"http://127.0.0.1:{os.getenv('PORT', '8000')}")
 
-MAX_TEST_ROUNDS = int(os.getenv("MAX_TEST_ROUNDS", "8"))
-REPAIR_TEST_ROUNDS = 3
-MAX_REVIEWS = 2
+MAX_TEST_ROUNDS = int(os.getenv("MAX_TEST_ROUNDS", "2"))
+REPAIR_TEST_ROUNDS = 1
+MAX_REVIEWS = 0
 MAX_REPAIRS = 3
 MAX_TESTS = 20
 MAX_TEST_STEPS = 120
@@ -171,7 +172,12 @@ sockets = GameSockets()
 
 @app.get("/", include_in_schema=False)
 async def home() -> FileResponse:
-    return FileResponse(WEB_DIR / "index.html")
+    return FileResponse(WEB_DIR / "app" / "index.html")
+
+
+@app.get("/brand-logo.png", include_in_schema=False)
+async def brand_logo() -> FileResponse:
+    return FileResponse(BRAND_LOGO_PATH, media_type="image/png")
 
 
 @app.get("/controller", include_in_schema=False)
@@ -330,22 +336,36 @@ async def build_game(
         if not XAI_API_KEY:
             write_package(game_id, transcript, demo_package(), design="")
         else:
-            job["stage"] = "Researching how this game is usually played…"
-            design = await research_game(transcript)
+            job["stage"] = "Looking up existing sprites…"
+            choice = await find_existing_sprites(transcript)
+            if choice["source"] == "kit":
+                design = choice["brief"]
+            else:
+                job["stage"] = "Drawing original pixel art…"
+                pieces = await plan_art(transcript)
+                images = await art.render_pieces(XAI_API_KEY, pieces)
+                pieces = [piece for piece in pieces if piece["id"] in images]
+                design = art.art_brief(game_id, pieces) if pieces else ""
             job["stage"] = "Writing the game…"
             package = await generate_package(transcript, design)
             write_package(game_id, transcript, package, design=design)
-            package = await refine(game_id, transcript, design, package, job, rounds=MAX_TEST_ROUNDS)
+            if choice["source"] != "kit" and images:
+                art.save_art(GAMES_DIR / game_id, images)
+            await refine(
+                game_id, transcript, design, package, job, rounds=MAX_TEST_ROUNDS, review=False
+            )
             if not _playable(read_report(game_id)):
-                job["stage"] = "Rewriting the game from the test failures…"
+                job["stage"] = "Rewriting the game so it actually starts…"
                 failures = read_report(game_id).get("problems") or ["the first version was unplayable"]
                 package = await generate_package(
                     transcript + "\n\nA previous version failed these tests:\n- "
-                    + "\n- ".join(str(item)[:400] for item in failures[:8]),
+                    + "\n- ".join(str(item)[:400] for item in failures[:6]),
                     design,
                 )
                 save_version(game_id, package)
-                await refine(game_id, transcript, design, package, job, rounds=MAX_TEST_ROUNDS)
+                await refine(
+                    game_id, transcript, design, package, job, rounds=1, review=False
+                )
         job["status"] = "ready"
         job["stage"] = None
     except Exception as exc:
@@ -354,6 +374,37 @@ async def build_game(
     finally:
         if audio_path:
             audio_path.unlink(missing_ok=True)
+
+
+async def find_existing_sprites(request: str) -> dict[str, Any]:
+    """Use public sprites when a real set already fits. Otherwise draw new art."""
+    if art.known_helpers(request):
+        return art.resolve_sprite_choice("", request)
+    catalog = read_text(WEB_DIR / "assets-catalog.txt")
+    instructions = (
+        "Decide whether this game should use existing public sprites or brand-new art. "
+        "Use web_search once. Look for a sprite set people already use for this exact game: "
+        "chess pieces, Pokémon, playing cards, or a standard emoji that IS the piece "
+        "(dice, for example). Reply in exactly this shape:\n"
+        "SOURCE: kit\n"
+        "HELPERS: chessPiece pokemon card emoji\n"
+        "BRIEF: which codes or Pokémon ids to draw\n"
+        "List only helpers that fit, using those four names. "
+        "If the request is an original or personal idea, or no catalog sprite set matches, reply:\n"
+        "SOURCE: original\n"
+        "HELPERS:\n"
+        "BRIEF:\n"
+        "Do not invent image URLs. Do not write rules. Checkers, Connect Four, and made-up "
+        "stories are original, not chess pieces or emoji.\n\n"
+        + catalog
+    )
+    try:
+        answer = await ask_xai(
+            instructions, f"Game request: {request}", tools=[{"type": "web_search"}]
+        )
+    except Exception:
+        answer = ""
+    return art.resolve_sprite_choice(answer, request)
 
 
 async def research_game(request: str) -> str:
@@ -367,11 +418,54 @@ async def research_game(request: str) -> str:
         )
 
 
-async def generate_package(request: str, design: str) -> dict[str, Any]:
+ART_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "pieces": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["background", "sprite"]},
+                    "subject": {"type": "string"},
+                },
+                "required": ["id", "kind", "subject"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["pieces"],
+    "additionalProperties": False,
+}
+
+
+async def plan_art(request: str) -> list[dict[str, str]]:
+    instructions = (
+        "List the original pictures a Nintendo DS style game needs for this idea. "
+        "One background of the place, plus one to three sprites (characters or important objects). "
+        "Describe the specific subject, not a famous copyrighted character. "
+        "ids are short lowercase words. kind is background or sprite."
+    )
+    try:
+        raw = await ask_xai(instructions, f"Game idea: {request}", schema=ART_SCHEMA)
+    except Exception:
+        raw = {}
+    return art.normalize_pieces(raw, request)
+
+
+async def generate_package(request: str, design: str = "") -> dict[str, Any]:
+    design_block = f"\n\nDESIGN NOTES (follow these):\n{design}" if design else ""
+    multiplayer = (
+        "\n\nThe user asked for multiplayer. players must be 2. Give player 1 and player 2 "
+        "each a full phone controller. onInput must use event.player so both humans play. "
+        "Do not replace the second player with a computer."
+        if wants_two_players(request)
+        else ""
+    )
     content = (
-        f"Game request: {request}\n\nDESIGN DOCUMENT (from research, implement all of it):\n{design}\n\n"
-        "Build the complete game now, including scenario tests that cover every item in the "
-        "feature checklist that can be tested."
+        f"Game request: {request}{design_block}{multiplayer}\n\n"
+        "Build the complete game now, with 3 to 5 short scenario tests."
     )
     problems: list[str] = []
     for _attempt in range(2):
@@ -380,8 +474,11 @@ async def generate_package(request: str, design: str) -> dict[str, Any]:
             if problems
             else ""
         )
-        package = normalize_package(await ask_xai(game_prompt(), content + feedback, schema=GAME_SCHEMA))
-        problems = check_package(package)
+        package = normalize_package(
+            await ask_xai(game_prompt(), content + feedback, schema=GAME_SCHEMA),
+            2 if wants_two_players(request) else None,
+        )
+        problems = check_package(package, art_paths(design), required_helpers(design))
         if not problems:
             return package
     raise RuntimeError("Generated game failed checks: " + "; ".join(problems))
@@ -405,7 +502,7 @@ async def fix_package(
     fixed = normalize_package(
         await ask_xai(game_prompt(), content, schema=GAME_SCHEMA), package["players"]
     )
-    problems = check_package(fixed)
+    problems = check_package(fixed, art_paths(design), required_helpers(design))
     if problems:
         raise RuntimeError("; ".join(problems))
     return fixed
@@ -571,10 +668,50 @@ def check_game_js(code: str) -> list[str]:
     return problems
 
 
-def check_package(package: dict[str, Any]) -> list[str]:
+def wants_two_players(request: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(multiplayer|two[- ]players?|2[- ]players?|co-?op|cooperative|pvp)\b",
+            request,
+            re.IGNORECASE,
+        )
+    )
+
+
+def art_paths(design: str) -> list[str]:
+    return re.findall(r"/games/[A-Za-z0-9_-]+/art/[a-z0-9]+\.png", design)
+
+
+def required_helpers(design: str) -> list[str]:
+    match = re.search(r"^HELPERS:\s*(.*)$", design, re.MULTILINE)
+    if not match:
+        return []
+    return re.findall(r"g\.(chessPiece|pokemon|card|emoji)\b", match.group(1))
+
+
+def check_package(
+    package: dict[str, Any],
+    paths: list[str] | None = None,
+    helpers: list[str] | None = None,
+) -> list[str]:
     problems = check_game_js(package["game_js"])
     if len(package.get("tests") or []) < 3:
         problems.append("tests must include at least 3 scenarios that prove the rules.")
+    if package.get("players") == 2 and not re.search(r"event\.player|g\.players", package["game_js"]):
+        problems.append(
+            "A 2-player game must read event.player or g.players so both controllers do something."
+        )
+    missing = [path for path in paths or [] if path not in package["game_js"]]
+    if missing:
+        problems.append(
+            "Draw the original pixel art with g.image. Missing: " + ", ".join(missing)
+        )
+    unused = [name for name in helpers or [] if f"g.{name}" not in package["game_js"]]
+    if unused:
+        problems.append(
+            "Draw the existing sprites with their helpers. Missing: "
+            + ", ".join(f"g.{name}" for name in unused)
+        )
     return problems
 
 

@@ -2,6 +2,8 @@ import json
 
 from fastapi.testclient import TestClient
 
+from app import art
+
 import app.main as main
 
 
@@ -53,6 +55,71 @@ def test_controls_are_normalized() -> None:
     assert controls["player2"] == controls["player1"]
 
     assert main.normalize_controls({}, 1)["player1"] == main.DEFAULT_CONTROLS
+
+
+def test_known_games_use_existing_sprites() -> None:
+    assert art.known_helpers("a chess match") == ["chessPiece"]
+    assert art.known_helpers("pokemon battle") == ["pokemon"]
+    assert art.known_helpers("fishing in Ontario with my dad") == []
+
+    chess = art.resolve_sprite_choice("SOURCE: original\nHELPERS:\nBRIEF:", "play chess")
+    assert chess["source"] == "kit"
+    assert "g.chessPiece" in chess["brief"]
+    assert main.required_helpers(chess["brief"]) == ["chessPiece"]
+
+    original = art.resolve_sprite_choice(
+        "SOURCE: original\nHELPERS:\nBRIEF:",
+        "reminisce about a fishing trip",
+    )
+    assert original == {"source": "original", "helpers": [], "brief": ""}
+
+    looked_up = art.resolve_sprite_choice(
+        "SOURCE: kit\nHELPERS: pokemon\nBRIEF: Pikachu is 25 and Charmander is 4.",
+        "a creature battle in tall grass",
+    )
+    assert looked_up["source"] == "kit"
+    assert looked_up["helpers"] == ["pokemon"]
+    assert "Pikachu is 25" in looked_up["brief"]
+
+    code = 'import { start } from "/static/kit.js";\n' + "start({ init(g) { g.chessPiece('wK'); } });\n" * 10
+    package = {"game_js": code, "tests": [{}, {}, {}], "players": 1}
+    assert any("g.pokemon" in problem for problem in main.check_package(package, helpers=["pokemon"]))
+    assert main.check_package(package, helpers=["chessPiece"]) == []
+
+
+def test_art_plan_always_has_a_background_and_a_sprite() -> None:
+    pieces = art.normalize_pieces(
+        {"pieces": [{"id": "Boat!", "kind": "sprite", "subject": "a wooden rowboat"}]},
+        "fishing at dawn",
+    )
+    assert pieces[0]["kind"] == "background"
+    assert any(piece["id"] == "boat" and piece["kind"] == "sprite" for piece in pieces)
+    brief = art.art_brief("abc", pieces)
+    assert "/games/abc/art/background.png" in brief
+    assert "/games/abc/art/boat.png" in brief
+
+
+def test_multiplayer_prompt_forces_two_controllers() -> None:
+    assert main.wants_two_players("make me a multiplayer fishing game")
+    assert main.wants_two_players("a 2-player race")
+    assert not main.wants_two_players("fishing in Ontario with my dad")
+    package = main.normalize_package(
+        {
+            "name": "Lake",
+            "players": 1,
+            "controls": {
+                "player1": [{"type": "button", "id": "cast", "label": "Cast"}],
+                "player2": [],
+            },
+            "game_js": "x" * 300,
+            "tests": [],
+        },
+        2,
+    )
+    assert package["players"] == 2
+    assert package["controls"]["players"] == 2
+    assert package["controls"]["player1"][0]["id"] == "cast"
+    assert package["controls"]["player2"][0]["id"] == "cast"
 
 
 def test_generated_code_checks() -> None:

@@ -1,0 +1,26 @@
+{
+  "name": "grow-a-game-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@designcodeio/threeui": "1.2.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "border-beam": "^1.4.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "thinking-orbs": "0.3.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7"
+  }
+}

@@ -14,18 +14,13 @@ writes a new game for any idea.
 
 ## How games are built
 
-Before writing code, Grok searches the web for how the real game looks and plays
-(`web/research-prompt.txt`) and writes a design document with rules, piece art, and a feature
-checklist. Then it implements that document on top of `web/kit.js`, using researched sprites
-(chess pieces from Lichess, Pokémon from PokeAPI, playing cards, Twemoji, or other public
-image URLs through `/api/asset`).
+A named game (chess, Connect Four, and so on) is built as that game, using catalog sprites
+such as Lichess pieces, Pokémon, and playing cards. A vague or personal idea is an original
+small game built from the details in the sentence, not a copy of an existing title.
 
-The game is not marked ready until a headless Chromium harness (`app/tester.py`) boots it,
-runs idle time, fuzzes the controllers, and plays the AI-written scenario tests. Failures go
-back to Grok for a fix; if the first version cannot even load, the pipeline rewrites it from
-scratch. A screenshot review checks the finished board against the research (so chess should
-show real pieces, not letters). Generation takes longer because of this loop. That is
-intentional.
+A short headless check (`app/tester.py`) boots the game, fuzzes the controllers, and runs a
+few scenario tests. One fix round runs if that check fails. If the game cannot even start, it
+is rewritten once.
 
 Each game designs its own phone controller from `dpad`, `joystick`, `button`, and `choice` (a grid
 of labeled options such as Connect Four columns or battle moves), and can swap layouts mid-game
@@ -47,6 +42,8 @@ Python 3.11 or newer is required.
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+npm install
+npm run build
 uvicorn app.main:app --reload
 ```
 
@@ -59,6 +56,10 @@ cp .env.example .env
 ```
 
 Then place your xAI API key in `.env` and restart the server. Never commit `.env`.
+
+For account creation and sign-in, create a Supabase project and copy its Project URL and public
+anon key from **Project Settings → API** into `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY`. Re-run `npm run build` after changing either frontend setting.
 
 ## Two-phone controller demo
 
