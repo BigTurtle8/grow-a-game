@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { BorderBeam } from "border-beam";
+import { BotAvatar } from "bot-avatars";
 import { ThinkingOrb } from "thinking-orbs";
+import { getAudioContext, VoiceBeam } from "voice-glow";
 import { AuthScreen } from "./AuthScreen";
 import { supabase } from "./lib/supabase";
 import { CrtBackground } from "./shaders/crt/CrtBackground";
-import { GetStartedButton } from "./shaders/get-started-button/GetStartedButton";
 
 type Screen = "home" | "auth" | "creator" | "loading";
 
@@ -27,6 +27,9 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [microphoneStream, setMicrophoneStream] = useState<MediaStream | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcript, setTranscript] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -40,6 +43,7 @@ export function App() {
 
     void supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      if (data.session) setScreen("creator");
       setAuthReady(true);
     });
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
@@ -65,6 +69,7 @@ export function App() {
     }
 
     setError("");
+    void getAudioContext()?.resume();
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       setError("Microphone recording is not supported in this browser.");
       return;
@@ -72,6 +77,7 @@ export function App() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicrophoneStream(stream);
       const mimeType = MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
       const chunks: Blob[] = [];
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
@@ -82,12 +88,15 @@ export function App() {
       });
       recorder.addEventListener("stop", async () => {
         stream.getTracks().forEach((track) => track.stop());
+        recorderRef.current = null;
+        setMicrophoneStream(null);
         if (timerRef.current) window.clearInterval(timerRef.current);
         setRecording(false);
         const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-        await generateFromRecording(blob);
+        await transcribeRecording(blob);
       });
 
+      setTranscript("");
       setElapsed(0);
       setRecording(true);
       const startedAt = Date.now();
@@ -97,6 +106,7 @@ export function App() {
       );
       recorder.start();
     } catch (reason) {
+      setMicrophoneStream(null);
       const message =
         reason instanceof DOMException && reason.name === "NotAllowedError"
           ? "Allow microphone access, then press record again."
@@ -105,10 +115,39 @@ export function App() {
     }
   }
 
-  async function generateFromRecording(recordingBlob: Blob) {
-    setScreen("loading");
+  async function transcribeRecording(recordingBlob: Blob) {
+    setTranscribing(true);
     const data = new FormData();
     data.append("audio", recordingBlob, recordingName(recordingBlob.type));
+
+    try {
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: data,
+      });
+      const result = (await response.json()) as { text?: string; detail?: string };
+      if (!response.ok || !result.text) {
+        throw new Error(result.detail || "The recording could not be transcribed.");
+      }
+      setTranscript(result.text);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Transcription failed.");
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  async function submitTranscript() {
+    const prompt = transcript.trim();
+    if (!prompt) {
+      setError("Record your idea before submitting it.");
+      return;
+    }
+
+    setError("");
+    setScreen("loading");
+    const data = new FormData();
+    data.append("prompt", prompt);
 
     try {
       const response = await fetch("/api/games/generate", {
@@ -160,9 +199,13 @@ export function App() {
         <CreatorScreen
           elapsed={elapsed}
           error={error}
+          microphoneStream={microphoneStream}
           recording={recording}
+          transcript={transcript}
+          transcribing={transcribing}
           session={session}
           onRecord={toggleRecording}
+          onSubmit={submitTranscript}
           onSignOut={async () => {
             await supabase?.auth.signOut();
             setSession(null);
@@ -194,9 +237,6 @@ function HomeScreen({ onStart }: { onStart: () => void }) {
         aria-label="Background push start"
         onClick={onStart}
       />
-      <div className="auth-preview" aria-label="Future account access">
-        <GetStartedButton />
-      </div>
       <div className="home-content">
         <img className="brand-logo" src="/brand-logo.png" alt="Grow a Game" />
       </div>
@@ -207,18 +247,26 @@ function HomeScreen({ onStart }: { onStart: () => void }) {
 type CreatorScreenProps = {
   elapsed: number;
   error: string;
+  microphoneStream: MediaStream | null;
   recording: boolean;
+  transcript: string;
+  transcribing: boolean;
   session: Session;
   onRecord: () => void;
+  onSubmit: () => void;
   onSignOut: () => void;
 };
 
 function CreatorScreen({
   elapsed,
   error,
+  microphoneStream,
   recording,
+  transcript,
+  transcribing,
   session,
   onRecord,
+  onSubmit,
   onSignOut,
 }: CreatorScreenProps) {
   const [showGames, setShowGames] = useState(false);
@@ -231,6 +279,15 @@ function CreatorScreen({
           Stored games
         </button>
         <div>
+          <BotAvatar
+            type="droid"
+            face="mouth"
+            state={recording ? "working" : "default"}
+            size={36}
+            theme="dark"
+            shading="plastic"
+            seed={0.38}
+          />
           <span>{session.user.email}</span>
           <button type="button" onClick={onSignOut}>Sign out</button>
         </div>
@@ -260,30 +317,58 @@ function CreatorScreen({
       )}
 
       <div className="creator-main">
-        <p className="creator-kicker">VOICE TO PLAYABLE WORLD</p>
         <h1>Let Grok build your story.</h1>
-        <p className="creator-hint">Describe the game you want to play, then stop when you’re done.</p>
-        {error && <p className="creator-error">{error}</p>}
-        <BorderBeam
-          className="voice-beam"
-          size="md"
+        <VoiceBeam
+          className="voice-composer-beam"
+          type="default"
+          stream={microphoneStream}
+          processing={transcribing}
+          active={recording || transcribing}
+          idle={0}
+          sensitivity={3.4}
+          threshold={0.012}
+          reach={1.45}
+          spread={1.1}
           colorVariant="colorful"
-          strength={0.7}
-          active
           theme="dark"
-          borderRadius={24}
+          strength={0.95}
+          borderRadius={32}
         >
-          <button
-            className={`creator-record${recording ? " is-recording" : ""}`}
-            type="button"
-            onClick={onRecord}
-            aria-pressed={recording}
-          >
-            <span className="record-square" aria-hidden="true" />
-            <span>{recording ? "Stop & build" : "Start recording"}</span>
-            <time>{formatTime(elapsed)}</time>
-          </button>
-        </BorderBeam>
+          <div className="voice-composer">
+            <div className={`transcript-copy${transcript ? " has-transcript" : ""}`}>
+              {recording
+                ? "Listening…"
+                : transcribing
+                  ? "Turning your voice into words…"
+                  : transcript || "Your game idea will appear here."}
+            </div>
+            {error && <p className="creator-error">{error}</p>}
+            <div className="composer-actions">
+              <button
+                className={`composer-record${recording ? " is-recording" : ""}`}
+                type="button"
+                onClick={onRecord}
+                disabled={transcribing}
+                aria-pressed={recording}
+              >
+                <span className="record-square" aria-hidden="true" />
+                <span>
+                  {recording ? "Stop" : transcript ? "Record again" : "Record"}
+                </span>
+                <time>{formatTime(elapsed)}</time>
+              </button>
+              <button
+                className="composer-submit"
+                type="button"
+                onClick={onSubmit}
+                disabled={!transcript || recording || transcribing}
+                aria-label="Build this game"
+              >
+                ↑
+              </button>
+            </div>
+          </div>
+        </VoiceBeam>
       </div>
     </section>
   );
