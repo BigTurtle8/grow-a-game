@@ -190,7 +190,7 @@ function render() {
     context.clip();
     context.fillStyle = definition.background ?? "#11120f";
     context.fillRect(0, 0, g.width, g.height);
-    context.imageSmoothingEnabled = true;
+    context.imageSmoothingEnabled = false;
     context.save();
     definition.draw?.(g, context);
     context.restore();
@@ -332,7 +332,7 @@ function createApi(keep) {
       }
       target.save();
       if (options.alpha !== undefined) target.globalAlpha = options.alpha;
-      target.imageSmoothingEnabled = options.smooth ?? !(w > sprite.width * 1.5);
+      target.imageSmoothingEnabled = options.smooth ?? false;
       if (options.flip || options.rotate) {
         target.translate(left + w / 2, top + h / 2);
         if (options.rotate) target.rotate(options.rotate);
@@ -348,7 +348,7 @@ function createApi(keep) {
       if (!target) return;
       const size = options.size ?? 28;
       target.save();
-      target.font = `${options.weight ?? 600} ${size}px ${options.font ?? '"Space Grotesk", sans-serif'}`;
+      target.font = `${options.weight ?? 400} ${size}px ${options.font ?? '"Press Start 2P", monospace'}`;
       target.textAlign = options.align ?? "center";
       target.textBaseline = options.baseline ?? "middle";
       if (options.stroke) {

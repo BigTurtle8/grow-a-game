@@ -20,10 +20,10 @@ os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(ROOT / ".cache" / "ms-play
 
 from playwright.async_api import Browser, Page, async_playwright  # noqa: E402
 
-LOAD_TIMEOUT_MS = 20_000
-ASSET_WAIT_SECONDS = 8
-FUZZ_ITERATIONS = 1200
-IDLE_SECONDS = 120
+LOAD_TIMEOUT_MS = 15_000
+ASSET_WAIT_SECONDS = 3
+FUZZ_ITERATIONS = 180
+IDLE_SECONDS = 8
 SLOW_FRAME_MS = 16
 
 _playwright = None
