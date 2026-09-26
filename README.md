@@ -41,6 +41,8 @@ Python 3.11 or newer is required.
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+npm install
+npm run build
 uvicorn app.main:app --reload
 ```
 
@@ -53,6 +55,10 @@ cp .env.example .env
 ```
 
 Then place your xAI API key in `.env` and restart the server. Never commit `.env`.
+
+For account creation and sign-in, create a Supabase project and copy its Project URL and public
+anon key from **Project Settings → API** into `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY`. Re-run `npm run build` after changing either frontend setting.
 
 ## Two-phone controller demo
 

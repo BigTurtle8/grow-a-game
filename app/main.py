@@ -33,6 +33,7 @@ WEB_DIR = ROOT / "web"
 GAMES_DIR = ROOT / "games"
 UPLOADS_DIR = ROOT / ".uploads"
 ASSET_CACHE_DIR = ROOT / ".cache" / "assets"
+BRAND_LOGO_PATH = WEB_DIR / "brand-logo.png"
 for directory in (GAMES_DIR, UPLOADS_DIR, ASSET_CACHE_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -120,7 +121,12 @@ sockets = GameSockets()
 
 @app.get("/", include_in_schema=False)
 async def home() -> FileResponse:
-    return FileResponse(WEB_DIR / "index.html")
+    return FileResponse(WEB_DIR / "app" / "index.html")
+
+
+@app.get("/brand-logo.png", include_in_schema=False)
+async def brand_logo() -> FileResponse:
+    return FileResponse(BRAND_LOGO_PATH, media_type="image/png")
 
 
 @app.get("/controller", include_in_schema=False)
