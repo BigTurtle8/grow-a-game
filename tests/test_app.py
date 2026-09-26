@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 import app.main as main
@@ -58,6 +60,20 @@ def test_generated_code_checks() -> None:
     assert main.check_game_js(good) == []
     assert main.check_game_js('import x from "lodash";\nstart({});') != []
     assert any("kit.js" in problem for problem in main.check_game_js("start({});" * 40))
+    package = main.normalize_package(
+        {"name": "X", "players": 1, "controls": {}, "game_js": good, "tests": []}
+    )
+    assert any("tests" in problem for problem in main.check_package(package))
+
+
+def test_research_and_catalog_files_exist() -> None:
+    assert (main.WEB_DIR / "research-prompt.txt").exists()
+    assert (main.WEB_DIR / "assets-catalog.txt").exists()
+    assert (main.WEB_DIR / "examples" / "connect4.tests.json").exists()
+    tests = main.normalize_tests(
+        json.loads((main.WEB_DIR / "examples" / "connect4.tests.json").read_text(encoding="utf-8"))
+    )
+    assert len(tests) >= 3
 
 
 def test_error_report_without_key_does_not_repair(monkeypatch) -> None:

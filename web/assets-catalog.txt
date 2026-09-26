@@ -1,0 +1,26 @@
+VERIFIED KIT SPRITES (use these instead of guessing URLs)
+
+Chess (Lichess CBurnett, the pieces people recognize):
+  g.chessPiece("wK") g.chessPiece("wQ") g.chessPiece("wR") g.chessPiece("wB") g.chessPiece("wN") g.chessPiece("wP")
+  g.chessPiece("bK") g.chessPiece("bQ") g.chessPiece("bR") g.chessPiece("bB") g.chessPiece("bN") g.chessPiece("bP")
+  Draw each piece at least 64px on the board. Do not use letter or emoji stand-ins as the main set.
+
+Playing cards (Deck of Cards API):
+  g.card("AS") ranks A, 2-9, 0 (ten), J, Q, K plus suits S, H, D, C. g.cardBack().
+
+Pokemon (official sprites):
+  g.pokemon(id) front, g.pokemon(id, {back:true}) for the player's battler.
+  Common ids: 1 Bulbasaur, 4 Charmander, 7 Squirtle, 25 Pikachu, 16 Pidgey, 19 Rattata,
+  133 Eevee, 143 Snorlax, 150 Mewtwo. Items:
+  g.image("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png", "o")
+
+Emoji art (Twemoji; good for animals, food, vehicles, weather, trees, dice):
+  g.emoji("fish") is wrong — pass the actual emoji character, e.g. g.emoji("🎲")
+
+Other public images:
+  g.image(url, fallbackEmoji) — only URLs from the research document or this catalog.
+  All URLs are proxied. A bad URL becomes the fallback, which testers treat as a failure,
+  so do not guess GitHub paths.
+
+Draw with shapes when that is how the real game looks (Connect Four discs, Pong paddles,
+Tetris minos, checker discs, Go stones). Use sprites when the real game has distinct pieces.
