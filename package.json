@@ -12,9 +12,11 @@
     "@designcodeio/threeui": "1.2.0",
     "@supabase/supabase-js": "^2.117.2",
     "border-beam": "^1.4.1",
+    "bot-avatars": "^0.1.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "thinking-orbs": "0.3.2"
+    "thinking-orbs": "0.3.2",
+    "voice-glow": "^0.2.1"
   },
   "devDependencies": {
     "@types/react": "^19.1.10",

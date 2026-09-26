@@ -190,6 +190,22 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/api/transcribe")
+async def transcribe_audio(audio: UploadFile = File(...)) -> dict[str, str]:
+    recording_id = uuid.uuid4().hex[:10]
+    extension = Path(audio.filename or "recording.wav").suffix or ".wav"
+    audio_path = UPLOADS_DIR / f"transcript-{recording_id}{extension}"
+    try:
+        with audio_path.open("wb") as target:
+            shutil.copyfileobj(audio.file, target)
+        text = await transcribe(audio_path)
+        if not text:
+            raise HTTPException(422, "The recording did not contain speech.")
+        return {"text": text}
+    finally:
+        audio_path.unlink(missing_ok=True)
+
+
 @app.post("/api/games/generate", status_code=202)
 async def generate_game(
     background_tasks: BackgroundTasks,

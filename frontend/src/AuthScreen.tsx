@@ -1,5 +1,7 @@
 import { type FormEvent, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { BotAvatar } from "bot-avatars";
+import { BorderBeam } from "border-beam";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 
 type AuthMode = "signin" | "signup";
@@ -43,13 +45,24 @@ export function AuthScreen({ onAuthenticated, onBack }: AuthScreenProps) {
   return (
     <section className="screen auth-screen">
       <button className="auth-back" type="button" onClick={onBack}>
-        ← Home
+        <span aria-hidden="true">←</span>
+        <span>Home</span>
       </button>
       <div className="auth-brand">
         <img src="/brand-logo.png" alt="Grow a Game" />
-        <p>Games begin with an idea.</p>
       </div>
       <div className="auth-card">
+        <div className="auth-avatar">
+          <BotAvatar
+            type="droid"
+            face="mouth"
+            state={busy ? "working" : "default"}
+            size={96}
+            theme="dark"
+            shading="plastic"
+            whirl={0.7}
+          />
+        </div>
         <p className="auth-eyebrow">{mode === "signin" ? "WELCOME BACK" : "NEW PLAYER"}</p>
         <h1>{mode === "signin" ? "Sign in" : "Create account"}</h1>
         {!isSupabaseConfigured ? (
@@ -81,9 +94,19 @@ export function AuthScreen({ onAuthenticated, onBack }: AuthScreenProps) {
               />
             </label>
             {message && <p className="auth-message" role="status">{message}</p>}
-            <button className="auth-submit" type="submit" disabled={busy}>
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
-            </button>
+            <BorderBeam
+              className="auth-beam"
+              size="md"
+              colorVariant="colorful"
+              strength={0.85}
+              active={!busy}
+              theme="dark"
+              borderRadius={12}
+            >
+              <button className="auth-submit" type="submit" disabled={busy}>
+                {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
+              </button>
+            </BorderBeam>
           </form>
         )}
         <button

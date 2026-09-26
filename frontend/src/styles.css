@@ -114,19 +114,6 @@ button {
   filter: drop-shadow(8px 12px 0 rgba(8, 10, 28, 0.56));
 }
 
-.auth-preview {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  z-index: 8;
-  width: clamp(220px, 24vw, 340px);
-  aspect-ratio: 1;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  border-radius: 22px;
-  overflow: hidden;
-  box-shadow: 8px 8px 0 rgba(8, 10, 28, 0.45);
-}
-
 .auth-screen {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(420px, 0.95fr);
@@ -151,10 +138,23 @@ button {
   top: 28px;
   left: 32px;
   z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border: 0;
   color: #b9bac2;
   background: transparent;
+  font: 500 12px/1 "Inter", sans-serif;
   cursor: pointer;
+}
+
+.auth-back span:first-child {
+  font-size: 11px;
+  transition: transform 160ms ease;
+}
+
+.auth-back:hover span:first-child {
+  transform: translateX(-3px);
 }
 
 .auth-brand,
@@ -172,13 +172,6 @@ button {
   display: block;
   width: min(430px, 70%);
   filter: drop-shadow(10px 14px 0 #0005);
-}
-
-.auth-brand p {
-  margin: 34px 0 0;
-  color: #b5b7c0;
-  font-size: clamp(20px, 2.4vw, 38px);
-  letter-spacing: -0.04em;
 }
 
 .auth-card {
@@ -204,6 +197,13 @@ button {
   font-size: clamp(42px, 5vw, 68px);
   line-height: 0.95;
   letter-spacing: -0.065em;
+}
+
+.auth-avatar {
+  height: 88px;
+  display: grid;
+  place-items: center;
+  margin: -14px 0 20px;
 }
 
 .auth-card form,
@@ -237,19 +237,28 @@ button {
   box-shadow: 0 0 0 3px #6d7bff24;
 }
 
-.auth-submit {
-  min-height: 52px;
+.auth-beam {
+  width: 100%;
   margin-top: 8px;
-  border: 0;
-  border-radius: 10px;
-  color: #0b0c10;
-  background: #f5f3ec;
-  font-weight: 700;
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid #484a56;
+  border-radius: 12px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #1c1e26, #101116);
+  font: 600 14px/1 "Inter", sans-serif;
   cursor: pointer;
 }
 
+.auth-submit:hover {
+  background: linear-gradient(180deg, #262936, #15171e);
+}
+
 .auth-submit:disabled {
-  opacity: 0.55;
+  opacity: 0.58;
   cursor: wait;
 }
 
@@ -340,70 +349,110 @@ button {
   letter-spacing: -0.075em;
 }
 
-.creator-hint {
-  margin: 30px auto 0;
-  color: #8d8f99;
-  font-size: 15px;
-}
-
 .creator-error {
-  margin: 20px auto 0;
+  margin: 14px 0 0;
   color: #ff7867;
   font-size: 13px;
+  text-align: left;
 }
 
-.voice-beam {
-  width: min(420px, 84vw);
+.voice-composer-beam {
+  width: min(760px, 88vw);
   margin: 44px auto 0;
+  border-radius: 32px;
 }
 
-.creator-record {
+.voice-composer {
   width: 100%;
-  min-height: 164px;
-  display: grid;
-  grid-template: 1fr auto / 1fr auto 1fr;
+  min-height: 270px;
+  display: flex;
+  flex-direction: column;
+  padding: 34px 34px 24px;
+  border: 1px solid #33353e;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 50% 120%, rgba(83, 112, 255, 0.09), transparent 42%),
+    #14151a;
+  box-shadow: 0 30px 90px #0008, inset 0 1px #ffffff08;
+}
+
+.transcript-copy {
+  flex: 1;
+  min-height: 142px;
+  color: #676972;
+  font: 500 clamp(21px, 2.5vw, 30px) / 1.28 "Inter", sans-serif;
+  letter-spacing: -0.045em;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.transcript-copy.has-transcript {
+  color: #e8e7e2;
+}
+
+.composer-actions {
+  display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 26px 30px;
-  border: 1px solid #353640;
-  border-radius: 24px;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.composer-record,
+.composer-submit {
+  border: 1px solid #41434d;
   color: #f7f6f1;
-  background: #111217;
-  font: 600 14px/1 "Inter", sans-serif;
+  background: #26272d;
   cursor: pointer;
 }
 
+.composer-record {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font: 600 13px/1 "Inter", sans-serif;
+}
+
 .record-square {
-  grid-column: 2;
-  width: 42px;
+  width: 15px;
   aspect-ratio: 1;
-  border: 2px solid #f5f4ef;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #ff5545;
-  box-shadow: 0 0 0 9px #ff554514;
-  transition: border-radius 180ms, transform 180ms;
+  box-shadow: 0 0 0 6px #ff554510;
+  transition: transform 180ms;
 }
 
-.creator-record > span:nth-child(2) {
-  grid-row: 2;
-  grid-column: 1 / 3;
-  justify-self: start;
+.composer-record time {
+  min-width: 40px;
+  color: #8c8e97;
+  font-variant-numeric: tabular-nums;
 }
 
-.creator-record time {
-  grid-row: 2;
-  grid-column: 3;
-  justify-self: end;
-  color: #747681;
+.composer-submit {
+  width: 52px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  font: 400 28px/1 "Inter", sans-serif;
+  transition: color 180ms, background 180ms, transform 180ms;
 }
 
-.creator-record:hover .record-square {
-  transform: scale(1.08);
+.composer-submit:not(:disabled):hover {
+  color: #0b0c10;
+  background: #ffffff;
+  transform: translateY(-2px);
 }
 
-.creator-record.is-recording .record-square {
-  border-radius: 2px;
+.composer-record.is-recording .record-square {
   animation: record-pulse 0.9s ease-in-out infinite;
+}
+
+.composer-record:disabled,
+.composer-submit:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
 }
 
 .games-panel {
@@ -604,12 +653,6 @@ button {
 }
 
 @media (max-width: 760px) {
-  .auth-preview {
-    top: 12px;
-    right: 12px;
-    width: 180px;
-  }
-
   .home-content {
     top: 12px;
     left: 50%;
@@ -630,11 +673,6 @@ button {
 
   .auth-brand img {
     width: 210px;
-  }
-
-  .auth-brand p {
-    margin-top: 16px;
-    font-size: 20px;
   }
 
   .auth-card {
@@ -659,17 +697,21 @@ button {
     font-size: clamp(52px, 15vw, 82px);
   }
 
-  .creator-hint {
-    max-width: 310px;
-    line-height: 1.5;
-  }
-
-  .voice-beam {
+  .voice-composer-beam {
     margin-top: 34px;
   }
 
-  .creator-record {
-    min-height: 150px;
+  .voice-composer {
+    min-height: 250px;
+    padding: 26px 22px 20px;
+  }
+
+  .composer-record {
+    padding: 0 14px;
+  }
+
+  .composer-record time {
+    display: none;
   }
 
   .games-panel {
@@ -706,7 +748,7 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .crt-start-hit,
-  .creator-record.is-recording .record-square,
+  .composer-record.is-recording .record-square,
   .voice-button.is-recording .voice-button__dot {
     animation: none;
   }

@@ -4,10 +4,17 @@ import getStartedButtonSource from "./sources/get-started-button.html?raw";
 
 export type GetStartedButtonProps = {
   className?: string;
+  label?: "SIGN UP" | "SIGN IN";
   style?: CSSProperties;
+  transparent?: boolean;
 };
 
-export function GetStartedButton({ className = "", style }: GetStartedButtonProps) {
+export function GetStartedButton({
+  className = "",
+  label = "SIGN UP",
+  style,
+  transparent = false,
+}: GetStartedButtonProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [documentVisible, setDocumentVisible] = useState(() => (
     typeof document === "undefined" || !document.hidden
@@ -48,15 +55,18 @@ export function GetStartedButton({ className = "", style }: GetStartedButtonProp
       style={{
         position: "relative",
         overflow: "hidden",
-        background: "#222225",
+        background: transparent ? "transparent" : "#222225",
         pointerEvents: "auto",
         ...style,
       }}
     >
       {mounted ? (
         <iframe
-          title="Get Started liquid-chrome button"
-          srcDoc={getStartedButtonSource}
+          title={`${label} liquid-chrome button`}
+          srcDoc={getStartedButtonSource
+            .replace('aria-label="Sign up"', `aria-label="${label}"`)
+            .replace(">SIGN UP</span>", `>${label}</span>`)
+            .replace("--bg:#222225;", `--bg:${transparent ? "transparent" : "#222225"};`)}
           sandbox="allow-scripts"
           loading="eager"
           onLoad={() => setReady(true)}
@@ -67,7 +77,7 @@ export function GetStartedButton({ className = "", style }: GetStartedButtonProp
             width: "100%",
             height: "100%",
             border: 0,
-            background: "#222225",
+            background: transparent ? "transparent" : "#222225",
             opacity: ready ? 1 : 0,
             pointerEvents: ready ? "auto" : "none",
             transition: "opacity 240ms ease-out",
