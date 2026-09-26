@@ -14,8 +14,20 @@ module loaded after an import map that maps "three" to Three.js. It must:
 - handle messages shaped like:
   {"type":"input","player":1,"action":"move","value":{"x":0.2,"y":-0.5}}
   {"type":"input","player":1,"action":"action","value":true}
+- remember that a joystick sends {"x":0,"y":0} when released. For discrete choices such
+  as lanes, columns, or menu items, preserve the current selection and use a threshold plus
+  a release latch so each joystick gesture moves exactly one step
 - make every action named in controller affect gameplay
 - include clear goals, visual feedback, scores, and restart behavior
+- implement real collision rules: players must never pass through walls, obstacles, or the
+  game board boundary
+- update every enemy during the animation loop. Enemy pathfinding must choose traversable
+  neighboring cells or valid world-space targets, not merely test a tiny movement that can
+  repeatedly steer into a wall
+- preserve the recognizable core rules of a named game. For maze games, align turns to
+  corridors, queue direction changes until a valid intersection, move enemies continuously,
+  and verify that every spawn has a path into the playable area
+- map screen-up joystick input to the visually upward direction in the active camera view
 - use low-poly geometry and keep the scene lightweight
 - resize correctly and cap devicePixelRatio at 2
 
@@ -23,8 +35,10 @@ The controller object must contain "player1" and, for two-player games, "player2
 an array of controls. Supported controls are:
 
 {"type":"joystick","action":"move","label":"Move"}
+{"type":"dpad","action":"move","label":"Move"}
 {"type":"button","action":"action","label":"Jump"}
 
-Use at most one joystick and two buttons per player. Button actions must be unique within a
-player. The players integer and controller definitions must agree.
+Use a dpad for four-directional grid and maze movement, and a joystick for continuous analog
+movement. Use at most one joystick or dpad and two action buttons per player. Button actions
+must be unique within a player. The players integer and controller definitions must agree.
 

@@ -67,6 +67,14 @@ textarea:focus { border-color: var(--acid); }
 .joystick::after { width: 1px; height: 70%; }
 .joystick span { position: absolute; bottom: -2rem; font: .7rem "DM Mono"; letter-spacing: .1em; text-transform: uppercase; }
 .stick { z-index: 2; width: 34%; aspect-ratio: 1; border-radius: 50%; background: var(--acid); box-shadow: 0 6px 24px #0008; }
+.dpad { width: min(46vw, 290px); aspect-ratio: 1; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); gap: 6px; position: relative; }
+.dpad-button { border: 1px solid #51544a; border-radius: 12px; color: #111; background: var(--acid); font-size: clamp(1.6rem, 7vw, 2.6rem); font-weight: 700; touch-action: none; }
+.dpad-button.pressed { filter: brightness(.72); transform: scale(.94); }
+.dpad-button.up { grid-area: 1 / 2; }
+.dpad-button.left { grid-area: 2 / 1; }
+.dpad-button.down { grid-area: 3 / 2; }
+.dpad-button.right { grid-area: 2 / 3; }
+.dpad > span { position: absolute; inset: auto 0 -1.7rem; text-align: center; font: .7rem "DM Mono"; letter-spacing: .1em; text-transform: uppercase; }
 .action-button { width: min(28vw, 180px); aspect-ratio: 1; border: 0; border-radius: 50%; color: #111; background: var(--acid); font-size: 1.1rem; font-weight: 700; text-transform: uppercase; box-shadow: 0 9px 0 #768f34; }
 .action-button.pressed { transform: translateY(7px); box-shadow: 0 2px 0 #768f34; }
 .controller-note { margin: 0; color: #62645c; text-align: center; font: .65rem "DM Mono"; text-transform: uppercase; }

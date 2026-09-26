@@ -47,8 +47,43 @@ function render(controls) {
   controlsRoot.replaceChildren();
   for (const control of controls) {
     if (control.type === "joystick") addJoystick(control);
+    else if (control.type === "dpad") addDpad(control);
     else addButton(control);
   }
+}
+
+function addDpad(control) {
+  const dpad = document.createElement("div");
+  dpad.className = "dpad";
+  const directions = [
+    { label: "↑", name: "Up", className: "up", value: { x: 0, y: 1 } },
+    { label: "←", name: "Left", className: "left", value: { x: -1, y: 0 } },
+    { label: "↓", name: "Down", className: "down", value: { x: 0, y: -1 } },
+    { label: "→", name: "Right", className: "right", value: { x: 1, y: 0 } },
+  ];
+  for (const direction of directions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `dpad-button ${direction.className}`;
+    button.textContent = direction.label;
+    button.setAttribute("aria-label", direction.name);
+    button.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      button.classList.add("pressed");
+      send(control.action, direction.value);
+    });
+    const release = (event) => {
+      event.preventDefault();
+      button.classList.remove("pressed");
+    };
+    button.addEventListener("pointerup", release);
+    button.addEventListener("pointercancel", release);
+    dpad.append(button);
+  }
+  const label = document.createElement("span");
+  label.textContent = control.label || "Move";
+  dpad.append(label);
+  controlsRoot.append(dpad);
 }
 
 function addButton(control) {
