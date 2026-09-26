@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grow-a-Game Console</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="console">
+    <header>
+      <p class="eyebrow">Laptop prototype</p>
+      <h1>Grow a game<br>with your voice.</h1>
+      <p class="lede">Describe a game or record your voice. Open the generated game in one tab and each controller in another browser or phone.</p>
+    </header>
+
+    <form id="generator">
+      <label for="prompt">Game idea</label>
+      <textarea id="prompt" name="prompt" rows="4" placeholder="Make a two-player black and white 3D fishing game."></textarea>
+      <div class="or"><span>or</span></div>
+      <button id="record" class="record-button" type="button">
+        <span class="record-dot"></span>
+        <span id="record-label">Record voice</span>
+        <span id="record-time">00:00</span>
+      </button>
+      <audio id="recording-preview" class="recording-preview hidden" controls></audio>
+      <details class="upload-fallback">
+        <summary>Use an existing audio file instead</summary>
+        <label class="file-picker" for="audio">
+          <span>Choose recording</span>
+          <small id="file-name">WAV, MP3, M4A, or OGG</small>
+        </label>
+        <input id="audio" name="audio" type="file" accept="audio/*">
+      </details>
+      <button id="generate" type="submit">Generate game <span>→</span></button>
+    </form>
+
+    <section id="status" class="status hidden" aria-live="polite"></section>
+    <section id="result" class="result hidden">
+      <div>
+        <p class="eyebrow">Your game is ready</p>
+        <h2 id="game-title">Generated game</h2>
+        <p id="transcript"></p>
+      </div>
+      <div class="launch-grid">
+        <a id="game-link" class="launch primary" target="_blank"><span>01</span> Open game display</a>
+        <a id="p1-link" class="launch" target="_blank"><span>02</span> Open Player 1</a>
+        <a id="p2-link" class="launch" target="_blank"><span>03</span> Open Player 2</a>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/static/console.js"></script>
+</body>
+</html>
+
