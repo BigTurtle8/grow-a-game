@@ -3,14 +3,35 @@
 A laptop-based prototype of the full voice-to-game console:
 
 1. Enter a game idea or upload an audio recording.
-2. FastAPI transcribes audio and generates a Three.js game.
+2. FastAPI transcribes audio and Grok writes a game on top of the runtime kit.
 3. Open the game display in one browser tab.
 4. Open Player 1 and Player 2 controllers in two other tabs or on phones.
 5. Controller input reaches the game in real time over WebSockets.
 
-Without an xAI key, text prompts generate a local demo game so the complete controller flow
-can be tested immediately. With a key, audio uses Grok speech-to-text and prompts use Grok to
-generate a new game.
+Without an xAI key, text prompts load the hand-written Connect Four demo so the complete
+controller flow can be tested immediately. With a key, audio uses Grok speech-to-text and Grok
+writes a new game for any idea.
+
+## How games are built
+
+Grok writes the whole game as JavaScript, but on top of a tested runtime, `web/kit.js`. The kit
+owns everything that used to break: the game loop, scaling a 1280x720 canvas to any screen,
+controller input, HUD, game over and restart, timers, and loading online sprites (Pokémon via
+PokeAPI, playing cards, Twemoji, or any image URL) through the caching proxy at `/api/asset`.
+Failed images fall back to an emoji so a bad URL never breaks a game. The instructions Grok
+receives are in `web/game-generator-prompt.txt`, plus `web/examples/connect4.js` as a reference.
+
+Each game designs its own phone controller from `dpad`, `joystick`, `button`, and `choice` (a grid
+of labeled options such as Connect Four columns or battle moves), and can swap layouts mid-game
+with `g.setControls`, e.g. a dpad for walking and a move list in battle.
+
+When a game crashes, the kit reports the error (with line number) to
+`POST /api/games/{game_id}/errors`; the server sends the code and error back to Grok, saves the
+fix as a new version, and the game page reloads itself. Each game gets up to three repairs.
+
+Keyboard controls on the game page are handy for testing without phones: Player 1 uses WASD,
+Space/E/Q/R for buttons, and 1-9 for choices; Player 2 uses the arrows, Enter/Right Shift, and
+the numpad.
 
 ## Run it
 
@@ -51,7 +72,9 @@ laptop address; `localhost` on a phone refers to the phone itself.
 - `GET /api/games/{game_id}/status` — poll generation status and receive launch URLs
 - `WS /ws/games/{game_id}` — game/controller input channel
 - `/games/{game_id}/` — generated playable game
-- `/games/{game_id}/controller.json` — dynamic controller definition
+- `POST /api/games/{game_id}/errors` — runtime error report that triggers an automatic repair
+- `GET /api/asset?url=...` — cached proxy for online images and sounds
+- `/games/{game_id}/controller.json` — the game's initial phone controller layout
 - `/docs` — interactive FastAPI documentation
 
 Generated game packages are stored under `games/<game_id>/` and intentionally ignored by Git.

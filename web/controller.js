@@ -3,7 +3,15 @@ const gameId = params.get("game");
 const player = Number(params.get("player") || 1);
 const controlsRoot = document.querySelector("#controls");
 const status = document.querySelector("#controller-status");
+const message = document.querySelector("#controller-message");
+const DIRECTIONS = [
+  { name: "up", label: "▲", x: 0, y: -1 },
+  { name: "left", label: "◀", x: -1, y: 0 },
+  { name: "down", label: "▼", x: 0, y: 1 },
+  { name: "right", label: "▶", x: 1, y: 0 },
+];
 let socket;
+let currentLayout = "";
 
 if (!gameId) {
   status.textContent = "Missing game ID";
@@ -19,8 +27,8 @@ async function setup() {
   document.querySelector("#player-label").textContent = `Player ${player}`;
   document.querySelector("#game-name").textContent = metadata.name;
   document.body.dataset.player = String(player);
-  connect();
   render(definition[`player${player}`] || []);
+  connect();
 }
 
 function connect() {
@@ -29,87 +37,139 @@ function connect() {
   socket.addEventListener("open", () => {
     status.textContent = "Connected";
     status.classList.add("online");
+    socket.send(JSON.stringify({ type: "hello", player }));
   });
   socket.addEventListener("close", () => {
     status.textContent = "Reconnecting…";
     status.classList.remove("online");
     window.setTimeout(connect, 1000);
   });
+  socket.addEventListener("message", ({ data }) => {
+    let incoming;
+    try {
+      incoming = JSON.parse(data);
+    } catch {
+      return;
+    }
+    if (Number(incoming.player) !== player) return;
+    if (incoming.type === "layout" && Array.isArray(incoming.controls)) render(incoming.controls);
+    if (incoming.type === "status") {
+      message.textContent = String(incoming.text ?? "");
+      message.classList.toggle("hidden", !message.textContent);
+    }
+  });
 }
 
-function send(action, value) {
-  if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: "input", player, action, value }));
-  }
+function send(control, kind, extra = {}) {
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: "input", player, control, action: control, kind, ...extra }));
+  if (kind === "press" || kind === "select") navigator.vibrate?.(12);
 }
 
 function render(controls) {
+  const signature = JSON.stringify(controls);
+  if (signature === currentLayout) return;
+  currentLayout = signature;
   controlsRoot.replaceChildren();
   for (const control of controls) {
-    if (control.type === "joystick") addJoystick(control);
-    else if (control.type === "dpad") addDpad(control);
-    else addButton(control);
+    const id = String(control.id ?? control.action ?? "a");
+    if (control.type === "joystick") addJoystick(id, control);
+    else if (control.type === "dpad") addDpad(id, control);
+    else if (control.type === "choice") addChoice(id, control);
+    else addButton(id, control);
   }
 }
 
-function addDpad(control) {
+function labelled(node, text) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "control";
+  const label = document.createElement("span");
+  label.className = "control-label";
+  label.textContent = text;
+  wrapper.append(node, label);
+  controlsRoot.append(wrapper);
+}
+
+function holdable(element, onDown, onUp) {
+  element.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    try {
+      element.setPointerCapture(event.pointerId);
+    } catch {
+      // capture is optional; the press still counts
+    }
+    element.classList.add("pressed");
+    onDown();
+  });
+  const release = (event) => {
+    event.preventDefault();
+    if (!element.classList.contains("pressed")) return;
+    element.classList.remove("pressed");
+    onUp();
+  };
+  element.addEventListener("pointerup", release);
+  element.addEventListener("pointercancel", release);
+}
+
+function addDpad(id, control) {
   const dpad = document.createElement("div");
   dpad.className = "dpad";
-  const directions = [
-    { label: "↑", name: "Up", className: "up", value: { x: 0, y: 1 } },
-    { label: "←", name: "Left", className: "left", value: { x: -1, y: 0 } },
-    { label: "↓", name: "Down", className: "down", value: { x: 0, y: -1 } },
-    { label: "→", name: "Right", className: "right", value: { x: 1, y: 0 } },
-  ];
-  for (const direction of directions) {
+  for (const direction of DIRECTIONS) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `dpad-button ${direction.className}`;
+    button.className = `dpad-button ${direction.name}`;
     button.textContent = direction.label;
     button.setAttribute("aria-label", direction.name);
-    button.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      button.classList.add("pressed");
-      send(control.action, direction.value);
-    });
-    const release = (event) => {
-      event.preventDefault();
-      button.classList.remove("pressed");
-    };
-    button.addEventListener("pointerup", release);
-    button.addEventListener("pointercancel", release);
+    const value = { x: direction.x, y: direction.y };
+    holdable(
+      button,
+      () => send(id, "press", { direction: direction.name, value }),
+      () => send(id, "release", { direction: direction.name, value }),
+    );
     dpad.append(button);
   }
-  const label = document.createElement("span");
-  label.textContent = control.label || "Move";
-  dpad.append(label);
-  controlsRoot.append(dpad);
+  labelled(dpad, control.label || "Move");
 }
 
-function addButton(control) {
+function addButton(id, control) {
   const button = document.createElement("button");
+  button.type = "button";
   button.className = "action-button";
-  button.textContent = control.label || control.action;
-  const down = (event) => {
-    event.preventDefault();
-    button.classList.add("pressed");
-    send(control.action, true);
-  };
-  const up = (event) => {
-    event.preventDefault();
-    button.classList.remove("pressed");
-    send(control.action, false);
-  };
-  button.addEventListener("pointerdown", down);
-  button.addEventListener("pointerup", up);
-  button.addEventListener("pointercancel", up);
+  button.textContent = control.label || id;
+  if (control.color) button.style.setProperty("--button", control.color);
+  holdable(
+    button,
+    () => send(id, "press", { value: true }),
+    () => send(id, "release", { value: false }),
+  );
   controlsRoot.append(button);
 }
 
-function addJoystick(control) {
+function addChoice(id, control) {
+  const options = Array.isArray(control.options) ? control.options : [];
+  const grid = document.createElement("div");
+  grid.className = "choice-grid";
+  const columns = control.columns || (options.length === 4 ? 2 : Math.min(options.length, 7));
+  grid.style.setProperty("--columns", String(Math.max(1, columns)));
+  options.forEach((option, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "choice-button";
+    button.textContent = String(option);
+    holdable(
+      button,
+      () => send(id, "select", { value: index, option: String(option) }),
+      () => {},
+    );
+    grid.append(button);
+  });
+  labelled(grid, control.label || "Choose");
+}
+
+function addJoystick(id, control) {
   const pad = document.createElement("div");
   pad.className = "joystick";
-  pad.innerHTML = `<div class="stick"></div><span>${control.label || "Move"}</span>`;
+  pad.innerHTML = '<div class="stick"></div>';
   const stick = pad.querySelector(".stick");
   const move = (event) => {
     event.preventDefault();
@@ -123,7 +183,7 @@ function addJoystick(control) {
       y = (y / length) * radius;
     }
     stick.style.transform = `translate(${x}px, ${y}px)`;
-    send(control.action, { x: x / radius, y: -y / radius });
+    send(id, "move", { value: { x: x / radius, y: y / radius } });
   };
   pad.addEventListener("pointerdown", (event) => {
     pad.setPointerCapture(event.pointerId);
@@ -135,10 +195,9 @@ function addJoystick(control) {
   const release = (event) => {
     if (pad.hasPointerCapture(event.pointerId)) pad.releasePointerCapture(event.pointerId);
     stick.style.transform = "translate(0, 0)";
-    send(control.action, { x: 0, y: 0 });
+    send(id, "move", { value: { x: 0, y: 0 } });
   };
   pad.addEventListener("pointerup", release);
   pad.addEventListener("pointercancel", release);
-  controlsRoot.append(pad);
+  labelled(pad, control.label || "Move");
 }
-

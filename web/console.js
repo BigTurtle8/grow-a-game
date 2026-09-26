@@ -108,7 +108,7 @@ async function poll(gameId) {
     button.disabled = false;
     return;
   }
-  showStatus(job.transcript ? "Building the world…" : "Listening to your idea…");
+  showStatus(job.stage || (job.transcript ? "Writing the game…" : "Listening to your idea…"));
   window.setTimeout(() => poll(gameId), 1000);
 }
 

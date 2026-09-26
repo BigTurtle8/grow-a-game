@@ -84,9 +84,37 @@ textarea:focus { border-color: var(--acid); }
 .game-hud { position: fixed; inset: 0 0 auto; z-index: 2; padding: 14px 18px; display: flex; gap: 20px; align-items: center; background: linear-gradient(#000b, transparent); pointer-events: none; }
 .game-hud span { margin-left: auto; color: var(--acid); font: .7rem "DM Mono"; }
 .game-hud a { pointer-events: auto; font: .7rem "DM Mono"; }
+.kit-scores { position: fixed; top: 52px; left: 18px; z-index: 2; display: flex; gap: 10px; pointer-events: none; font-family: "DM Mono"; }
+.kit-scores:empty, .kit-status:empty { display: none; }
+.kit-score { padding: 6px 14px; display: flex; gap: 10px; align-items: baseline; border-left: 3px solid #c9ff44; background: #000a; }
+.kit-score.p2 { border-color: #ff8a4c; }
+.kit-score b { font-size: .75rem; }
+.kit-score span { font-size: 1.5rem; font-weight: 500; }
+.kit-status { position: fixed; top: 52px; left: 50%; z-index: 2; transform: translateX(-50%); padding: 8px 18px; background: #000a; font: 500 1rem "DM Mono"; pointer-events: none; }
+.kit-toast { position: fixed; bottom: 7vh; left: 50%; z-index: 3; transform: translateX(-50%); padding: 12px 22px; border-left: 3px solid var(--acid); background: #000c; font: 500 1.1rem "DM Mono"; pointer-events: none; }
+.kit-overlay { position: fixed; inset: 0; z-index: 4; display: grid; place-content: center; padding: 2rem; text-align: center; pointer-events: none; background: #000a; }
+.kit-overlay strong { font-size: clamp(2.6rem, 8vw, 6rem); line-height: 1; letter-spacing: -.05em; }
+.kit-overlay p { max-width: 760px; margin: 1rem auto 0; font-size: 1.3rem; }
+.kit-overlay small { display: block; margin-top: 1.4rem; color: #c8cabf; font: .85rem "DM Mono"; }
+.kit-overlay.error strong { color: #ffb86b; }
+.kit-overlay.error p { color: #ff9f8f; font: .95rem "DM Mono"; }
+
+.controller-message { margin: .6rem 0 0; padding: .7rem 1rem; border-left: 3px solid var(--acid); background: #1d1f18; font: 500 .95rem "DM Mono"; }
+.controls { flex-wrap: wrap; }
+.control { position: relative; display: grid; justify-items: center; gap: .6rem; }
+.control-label { font: .7rem "DM Mono"; letter-spacing: .1em; text-transform: uppercase; }
+.dpad > span, .joystick span { display: none; }
+.action-button { background: var(--button, var(--acid)); }
+.choice-grid { width: min(92vw, 720px); display: grid; grid-template-columns: repeat(var(--columns, 2), 1fr); gap: 8px; }
+.choice-button { min-height: 64px; padding: .6rem; border: 1px solid #51544a; border-radius: 12px; color: #111; background: var(--acid); font-size: clamp(1rem, 4vw, 1.5rem); font-weight: 700; touch-action: none; }
+.choice-button.pressed { filter: brightness(.72); transform: scale(.95); }
 
 @keyframes pulse {
   50% { box-shadow: 0 0 0 12px #ff624d08; transform: scale(.9); }
+}
+
+@media (max-width: 1000px) {
+  .kit-status { top: 100px; }
 }
 
 @media (max-width: 760px) {
