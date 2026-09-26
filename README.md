@@ -1,3 +1,57 @@
-# grow-a-game
-HackGt project
-We're currently at Georgia Tech Hackathon, and we're um, doing a hardware project where we create a game console of our own. Now, the reason why this game console is going to be a little different is we're going to create the console, so the bare bones, using some sort of Raspberry Pi or um, Arduino, so some sort of high-level microcontroller, and then um, we're going to use um, have some sort of display, and we're going to have some sort of um, like chassis for it. Now, um, the first step, what's going to happen is um, we're going to connect our phone to it, and um, there's going to be some sort of voice activation on the console itself that we can say, hey, we're playing... Um, I want to play this kind of game, that kind of game. It's going to send it back to the phone or laptop, uh, and it's going to use some sort of generative AI or some sort of AI to create the game, right? Once we create that game, once it creates that game, it's going to send it back uh, into the console, and then uh, it's going to be playable through the console, right? Um, another cool thing we're planning on doing is using our phone as a controller, and depending on the game, the controller's dynamic. So depending on what kind of controls the game needs, um, the phone controller, you could say in a way, is going to be dynamic.
+# Grow-a-Game
+
+A laptop-based prototype of the full voice-to-game console:
+
+1. Enter a game idea or upload an audio recording.
+2. FastAPI transcribes audio and generates a Three.js game.
+3. Open the game display in one browser tab.
+4. Open Player 1 and Player 2 controllers in two other tabs or on phones.
+5. Controller input reaches the game in real time over WebSockets.
+
+Without an xAI key, text prompts generate a local demo game so the complete controller flow
+can be tested immediately. With a key, audio uses Grok speech-to-text and prompts use Grok to
+generate a new game.
+
+## Run it
+
+Python 3.11 or newer is required.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+uvicorn app.main:app --reload
+```
+
+Open [http://localhost:8000](http://localhost:8000).
+
+To use voice and AI generation:
+
+```bash
+cp .env.example .env
+```
+
+Then place your xAI API key in `.env` and restart the server. Never commit `.env`.
+
+## Two-phone controller demo
+
+Start the server so other devices on your Wi-Fi can reach it:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Find the laptop's local IP address, then open `http://YOUR_LAPTOP_IP:8000` on each phone. Generate
+a two-player game and use the Player 1 and Player 2 links. All three pages must point to the same
+laptop address; `localhost` on a phone refers to the phone itself.
+
+## API
+
+- `POST /api/games/generate` — multipart form with `prompt`, `audio`, or both
+- `GET /api/games/{game_id}/status` — poll generation status and receive launch URLs
+- `WS /ws/games/{game_id}` — game/controller input channel
+- `/games/{game_id}/` — generated playable game
+- `/games/{game_id}/controller.json` — dynamic controller definition
+- `/docs` — interactive FastAPI documentation
+
+Generated game packages are stored under `games/<game_id>/` and intentionally ignored by Git.
