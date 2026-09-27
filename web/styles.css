@@ -57,7 +57,7 @@ textarea:focus { border-color: var(--acid); }
 
 .controller-page { overflow: hidden; touch-action: none; background: #141510; }
 .controller-page[data-player="2"] { --acid: #ff8a4c; }
-.controller { min-height: 100vh; padding: max(24px, env(safe-area-inset-top)) 24px max(20px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
+.controller { min-height: 100dvh; padding: max(24px, env(safe-area-inset-top)) 24px max(20px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
 .controller header { display: grid; grid-template-columns: 1fr auto; align-items: end; }
 .controller header .eyebrow { grid-column: 1 / -1; margin-bottom: .25rem; }
 .controller h1 { font-size: clamp(2rem, 8vw, 4rem); line-height: 1; letter-spacing: -.05em; }
@@ -88,6 +88,8 @@ textarea:focus { border-color: var(--acid); }
 .game-hud { position: fixed; inset: 0 0 auto; z-index: 2; padding: 14px 18px; display: flex; gap: 20px; align-items: center; background: linear-gradient(#000b, transparent); pointer-events: none; }
 .game-hud span { margin-left: auto; color: var(--acid); font: .7rem "DM Mono"; }
 .game-hud a { pointer-events: auto; font: .7rem "DM Mono"; }
+.game-hud a.game-back { padding: 8px 14px; border: 1px solid #62655a; border-radius: 999px; color: #f3f1e8; background: #10110e; font: 700 .75rem "DM Mono", monospace; letter-spacing: .04em; text-decoration: none; text-transform: uppercase; }
+.game-hud a.game-back:hover { border-color: var(--acid); color: var(--acid); }
 .kit-scores { position: fixed; top: 52px; left: 18px; z-index: 2; display: flex; gap: 10px; pointer-events: none; font-family: "DM Mono"; }
 .kit-scores:empty, .kit-status:empty { display: none; }
 .kit-score { padding: 6px 14px; display: flex; gap: 10px; align-items: baseline; border-left: 3px solid #c9ff44; background: #000a; }
@@ -103,6 +105,9 @@ textarea:focus { border-color: var(--acid); }
 .kit-overlay.error strong { color: #ffb86b; }
 .kit-overlay.error p { color: #ff9f8f; font: .95rem "DM Mono"; }
 
+.controller-links { display: flex; gap: 14px; pointer-events: auto; }
+.controller-links a { color: var(--acid); text-decoration: none; letter-spacing: .08em; text-transform: uppercase; }
+.controller-links a:hover { text-decoration: underline; }
 .controller-message { margin: .6rem 0 0; padding: .7rem 1rem; border-left: 3px solid var(--acid); background: #1d1f18; font: 500 .95rem "DM Mono"; }
 .controls { flex-wrap: wrap; }
 .control { position: relative; display: grid; justify-items: center; gap: .6rem; }
@@ -125,5 +130,52 @@ textarea:focus { border-color: var(--acid); }
   .console { padding: 4vh 0; grid-template-columns: 1fr; gap: 3rem; }
   .result { grid-template-columns: 1fr; }
   .controls { gap: 12vw; }
+}
+
+@media (orientation: landscape) {
+  .controller {
+    height: 100dvh;
+    min-height: 100dvh;
+    padding: max(8px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  }
+  .controller header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .controller header .eyebrow { grid-column: auto; margin: 0; }
+  .controller h1 { font-size: clamp(1.1rem, 4.2vh, 1.8rem); }
+  .controller-note { display: none; }
+  .controller-message { margin: .3rem 0 0; padding: .45rem .8rem; font-size: .85rem; }
+  .controls {
+    flex: 1;
+    min-height: 0;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2vh;
+    padding: 0 1vw;
+  }
+  .joystick, .dpad { width: min(38vh, 30vw, 230px); }
+  .action-button { width: min(26vh, 18vw, 128px); font-size: clamp(.8rem, 2.6vh, 1.05rem); box-shadow: 0 6px 0 #768f34; }
+  .action-button.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #768f34; }
+  .choice-grid { width: min(44vw, 520px); max-height: 72vh; overflow: auto; }
+  .choice-button { min-height: 44px; font-size: clamp(.85rem, 2.6vh, 1.15rem); }
+  .control-label { font-size: .62rem; }
+}
+
+@media (orientation: portrait) and (max-height: 900px) {
+  .controller-page::after {
+    position: fixed;
+    inset: auto 0 12px;
+    z-index: 5;
+    color: #c8cabf;
+    font: 600 .72rem "DM Mono", monospace;
+    letter-spacing: .08em;
+    text-align: center;
+    text-transform: uppercase;
+    pointer-events: none;
+    content: "Turn the phone sideways";
+  }
 }
 

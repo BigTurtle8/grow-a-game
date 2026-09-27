@@ -69,6 +69,7 @@ export async function boot() {
   });
   addEventListener("unhandledrejection", (event) => fail(errorInfo(event.reason, "running")));
   buildDom();
+  ensureRecordButton();
 
   const [metadata, controller] = await Promise.all([
     fetchJson("./metadata.json"),
@@ -81,7 +82,11 @@ export async function boot() {
   }
   layouts = structuredClone(defaultLayouts);
   if (TEST_MODE) installTestApi();
-  else connect();
+  else {
+    connect();
+    showControllerLinks();
+    sendControllersToPhones();
+  }
   addEventListener("keydown", (event) => onKey(event, true));
   addEventListener("keyup", (event) => onKey(event, false));
 
@@ -680,6 +685,54 @@ function beep(frequency = 440, duration = 0.1, type = "square", volume = 0.05) {
 addEventListener("pointerdown", () => audio?.resume(), { once: true });
 
 // ---------- HUD, overlay, errors ----------
+
+function showControllerLinks() {
+  const hud = document.querySelector(".game-hud");
+  if (!hud) return;
+  ensureRecordButton(hud);
+  const links = element("nav", "controller-links");
+  links.setAttribute("aria-label", "Phone controllers");
+  for (let player = 1; player <= playerCount; player += 1) {
+    const link = document.createElement("a");
+    const url = `/controller?game=${encodeURIComponent(gameId)}&player=${player}`;
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = playerCount > 1 ? `Player ${player}` : "Controller";
+    link.title = "Open this controller in its own window, or send the link to a phone";
+    link.addEventListener("click", (event) => {
+      const opened = window.open(url, `grow-controller-${player}`, "popup=yes,width=420,height=840");
+      if (opened) event.preventDefault();
+    });
+    links.append(link);
+  }
+  hud.append(links);
+}
+
+function sendControllersToPhones() {
+  fetch(`/api/games/${encodeURIComponent(gameId)}/phones`, { method: "POST" })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((result) => {
+      const sent = result?.sent ?? [];
+      if (!sent.length || !dom.toast) return;
+      const label = sent.map((item) => `Player ${item.player}`).join(" and ");
+      dom.toast.textContent = `${label} sent to phone`;
+      dom.toast.classList.remove("hidden");
+      clearTimeout(dom.toastTimer);
+      dom.toastTimer = setTimeout(() => dom.toast.classList.add("hidden"), 3200);
+    })
+    .catch(() => {});
+}
+
+function ensureRecordButton(hud = document.querySelector(".game-hud")) {
+  if (!hud || hud.querySelector(".game-back")) return;
+  const link = hud.querySelector('a[href="/"], a[href="/?screen=record"]') ?? document.createElement("a");
+  link.className = "game-back";
+  link.href = "/?screen=record";
+  link.textContent = "← Record";
+  link.title = "Back to the record page";
+  hud.prepend(link);
+}
 
 function buildDom() {
   dom.stage = document.querySelector("#game");

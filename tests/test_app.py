@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -13,6 +14,22 @@ app = main.app
 def test_health() -> None:
     with TestClient(app) as client:
         assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_transcribe_returns_text(monkeypatch) -> None:
+    async def fake_transcribe(path) -> str:
+        assert path.suffix == ".wav"
+        assert path.exists()
+        return "a two player fishing game"
+
+    monkeypatch.setattr(main, "transcribe", fake_transcribe)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/transcribe",
+            files={"audio": ("recording.wav", b"RIFFfake", "audio/wav")},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"text": "a two player fishing game"}
 
 
 def test_demo_prompt_generates_playable_package(monkeypatch) -> None:
@@ -87,6 +104,21 @@ def test_known_games_use_existing_sprites() -> None:
     assert main.check_package(package, helpers=["chessPiece"]) == []
 
 
+def test_sprite_backdrop_becomes_clear() -> None:
+    from PIL import Image
+    import io
+
+    image = Image.new("RGBA", (24, 24), (251, 4, 181, 255))
+    for x in range(8, 16):
+        for y in range(8, 16):
+            image.putpixel((x, y), (120, 72, 36, 255))
+    raw = io.BytesIO()
+    image.save(raw, "PNG")
+    cut = Image.open(io.BytesIO(art.knock_out_magenta(raw.getvalue()))).convert("RGBA")
+    assert cut.getpixel((0, 0))[3] == 0
+    assert cut.getpixel((12, 12))[3] == 255
+
+
 def test_art_plan_always_has_a_background_and_a_sprite() -> None:
     pieces = art.normalize_pieces(
         {"pieces": [{"id": "Boat!", "kind": "sprite", "subject": "a wooden rowboat"}]},
@@ -157,6 +189,86 @@ def test_asset_proxy_rejects_local_addresses() -> None:
     with TestClient(app) as client:
         for url in ("http://localhost:8000/health", "http://127.0.0.1/", "file:///etc/passwd"):
             assert client.get("/api/asset", params={"url": url}).status_code == 400
+
+
+def test_open_controller_keeps_player_query(monkeypatch) -> None:
+    from app import phones
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(phones, "find_adb", lambda: Path("adb"))
+    monkeypatch.setattr(
+        phones,
+        "run_adb",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or type("Result", (), {"returncode": 0, "stderr": "", "stdout": ""})(),
+    )
+    url = phones.open_controller("phoneB", "abc123", 2, 18080)
+    command = calls[0][0][1]
+    assert url.endswith("player=2")
+    assert "player=2" in command
+    assert command.index("player=2") > command.index("'") or '"' in command
+    assert "&" in command
+
+
+def test_send_controllers_uses_one_or_two_phones(monkeypatch) -> None:
+    from app import phones
+
+    opened: list[tuple[str, str, int, int]] = []
+    phones.reset_send_cache()
+    monkeypatch.setattr(phones, "list_devices", lambda: ["phoneA", "phoneB"])
+    monkeypatch.setattr(phones, "ensure_reverse", lambda serial, laptop_port=None: 18080)
+    monkeypatch.setattr(
+        phones,
+        "open_controller",
+        lambda serial, game_id, player, port: opened.append((serial, game_id, player, port)) or f"url-{player}",
+    )
+
+    one = phones.send_controllers("game-one", players=1)
+    assert [(item["serial"], item["player"]) for item in one["sent"]] == [("phoneA", 1)]
+    assert opened == [("phoneA", "game-one", 1, 18080)]
+
+    phones.reset_send_cache()
+    opened.clear()
+    two = phones.send_controllers("game-two", players=2)
+    assert [(item["serial"], item["player"]) for item in two["sent"]] == [("phoneA", 1), ("phoneB", 2)]
+    assert [item[2] for item in opened] == [1, 2]
+
+
+def test_cancel_generation_marks_job() -> None:
+    main.jobs["cancelme"] = {
+        "game_id": "cancelme",
+        "status": "generating",
+        "stage": "Writing the game…",
+        "error": None,
+    }
+    with TestClient(app) as client:
+        result = client.post("/api/games/cancelme/cancel").json()
+        status = client.get("/api/games/cancelme/status").json()
+    assert result["status"] == "cancelled"
+    assert status["status"] == "cancelled"
+    assert status["stage"] == "Cancelled"
+
+
+def test_phones_endpoint_opens_connected_devices(monkeypatch) -> None:
+    from app import phones
+
+    phones.reset_send_cache()
+    monkeypatch.setattr(phones, "list_devices", lambda: ["phoneA"])
+    monkeypatch.setattr(phones, "ensure_reverse", lambda serial, laptop_port=None: 18080)
+    monkeypatch.setattr(
+        phones,
+        "open_controller",
+        lambda serial, game_id, player, port: f"http://127.0.0.1:18080/controller?game={game_id}&player={player}",
+    )
+    monkeypatch.setattr(main, "XAI_API_KEY", None)
+    with TestClient(app) as client:
+        game_id = client.post("/api/games/generate", data={"prompt": "x"}).json()["game_id"]
+        phones.reset_send_cache()
+        result = client.post(f"/api/games/{game_id}/phones").json()
+        assert result["players"] == 2
+        assert result["sent"][0]["player"] == 1
+        assert result["sent"][0]["serial"] == "phoneA"
+        assert result["skipped"][0]["player"] == 2
 
 
 def test_controller_input_reaches_game_socket() -> None:

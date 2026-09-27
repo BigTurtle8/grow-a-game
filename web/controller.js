@@ -13,10 +13,23 @@ const DIRECTIONS = [
 let socket;
 let currentLayout = "";
 
+if (params.has("embed")) document.body.classList.add("controller-embed");
+
 if (!gameId) {
   status.textContent = "Missing game ID";
 } else {
   setup();
+}
+
+preferLandscape();
+document.addEventListener("pointerdown", preferLandscape, { once: true });
+
+async function preferLandscape() {
+  try {
+    await screen.orientation?.lock("landscape");
+  } catch {
+    // browsers only allow this after a gesture, or in standalone mode
+  }
 }
 
 async function setup() {

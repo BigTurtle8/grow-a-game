@@ -8,15 +8,17 @@ type AuthMode = "signin" | "signup";
 
 type AuthScreenProps = {
   onAuthenticated: (session: Session) => void;
+  onGuest: () => void;
   onBack: () => void;
 };
 
-export function AuthScreen({ onAuthenticated, onBack }: AuthScreenProps) {
+export function AuthScreen({ onAuthenticated, onGuest, onBack }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [guestPrompt, setGuestPrompt] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,9 +65,24 @@ export function AuthScreen({ onAuthenticated, onBack }: AuthScreenProps) {
             whirl={0.7}
           />
         </div>
-        <p className="auth-eyebrow">{mode === "signin" ? "WELCOME BACK" : "NEW PLAYER"}</p>
-        <h1>{mode === "signin" ? "Sign in" : "Create account"}</h1>
-        {!isSupabaseConfigured ? (
+        <p className="auth-eyebrow">
+          {guestPrompt ? "GUEST MODE" : mode === "signin" ? "WELCOME BACK" : "NEW PLAYER"}
+        </p>
+        <h1>{guestPrompt ? "Play without an account" : mode === "signin" ? "Sign in" : "Create account"}</h1>
+        {guestPrompt ? (
+          <>
+            <p className="auth-disclaimer">
+              Games you create as a guest are not saved. If you leave, they will not appear in
+              your library.
+            </p>
+            <button className="auth-submit" type="button" onClick={onGuest}>
+              Continue anyway
+            </button>
+            <button className="auth-switch" type="button" onClick={() => setGuestPrompt(false)}>
+              Back to sign in
+            </button>
+          </>
+        ) : !isSupabaseConfigured ? (
           <div className="auth-setup" role="status">
             Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to
             your <code>.env</code>, then rebuild the frontend.
@@ -109,16 +126,29 @@ export function AuthScreen({ onAuthenticated, onBack }: AuthScreenProps) {
             </BorderBeam>
           </form>
         )}
-        <button
-          className="auth-switch"
-          type="button"
-          onClick={() => {
-            setMode(mode === "signin" ? "signup" : "signin");
-            setMessage("");
-          }}
-        >
-          {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
-        </button>
+        {!guestPrompt && (
+          <>
+            {isSupabaseConfigured && (
+              <button
+                className="auth-switch"
+                type="button"
+                onClick={() => {
+                  setMode(mode === "signin" ? "signup" : "signin");
+                  setMessage("");
+                }}
+              >
+                {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
+              </button>
+            )}
+            <button
+              className="auth-guest"
+              type="button"
+              onClick={() => setGuestPrompt(true)}
+            >
+              Continue as guest
+            </button>
+          </>
+        )}
       </div>
     </section>
   );

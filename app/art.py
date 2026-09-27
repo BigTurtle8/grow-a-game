@@ -194,15 +194,83 @@ def _prompt(piece: dict[str, str]) -> str:
     )
 
 
+def _looks_like_magenta(red: int, green: int, blue: int) -> bool:
+    return red > 200 and blue > 140 and green < 90 and red - green > 80 and blue - green > 60
+
+
 def knock_out_magenta(data: bytes) -> bytes:
+    """Cut the flat backdrop out of a sprite so the character has a clear background.
+
+    Generated backdrops are magenta, but not always pure #FF00FF, and the edge pixels
+    are a mix of that color and the sprite. The connected backdrop is removed first,
+    then the pink fringe around the character.
+    """
     from PIL import Image
 
     image = Image.open(io.BytesIO(data)).convert("RGBA")
-    pixels = [
-        (red, green, blue, 0 if red > 190 and blue > 190 and green < 140 else alpha)
-        for red, green, blue, alpha in image.getdata()
+    width, height = image.size
+    pixels = image.load()
+    corners = [
+        pixels[0, 0][:3],
+        pixels[width - 1, 0][:3],
+        pixels[0, height - 1][:3],
+        pixels[width - 1, height - 1][:3],
     ]
-    image.putdata(pixels)
+    key = tuple(sum(channel) // 4 for channel in zip(*corners))
+
+    def distance(color: tuple[int, int, int]) -> int:
+        return sum((channel - key_channel) ** 2 for channel, key_channel in zip(color, key))
+
+    def is_backdrop(color: tuple[int, int, int]) -> bool:
+        return distance(color) <= 70 ** 2 or _looks_like_magenta(*color)
+
+    seen = bytearray(width * height)
+    stack = [(x, 0) for x in range(width)]
+    stack += [(x, height - 1) for x in range(width)]
+    stack += [(0, y) for y in range(height)]
+    stack += [(width - 1, y) for y in range(height)]
+    while stack:
+        x, y = stack.pop()
+        if x < 0 or y < 0 or x >= width or y >= height:
+            continue
+        index = y * width + x
+        if seen[index]:
+            continue
+        seen[index] = 1
+        red, green, blue, _alpha = pixels[x, y]
+        if not is_backdrop((red, green, blue)):
+            continue
+        pixels[x, y] = (red, green, blue, 0)
+        stack.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
+
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha and distance((red, green, blue)) <= 45 ** 2:
+                pixels[x, y] = (red, green, blue, 0)
+
+    for _pass in range(3):
+        clear: list[tuple[int, int]] = []
+        for y in range(height):
+            for x in range(width):
+                red, green, blue, alpha = pixels[x, y]
+                if not alpha:
+                    continue
+                neighbors = ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+                touches_clear = any(
+                    nx < 0 or ny < 0 or nx >= width or ny >= height or pixels[nx, ny][3] == 0
+                    for nx, ny in neighbors
+                )
+                if not touches_clear:
+                    continue
+                if is_backdrop((red, green, blue)) or (
+                    distance((red, green, blue)) <= 120 ** 2 and green < 90
+                ):
+                    clear.append((x, y))
+        for x, y in clear:
+            red, green, blue, _alpha = pixels[x, y]
+            pixels[x, y] = (red, green, blue, 0)
+
     output = io.BytesIO()
     image.save(output, "PNG")
     return output.getvalue()

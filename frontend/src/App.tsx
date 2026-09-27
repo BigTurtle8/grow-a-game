@@ -11,9 +11,11 @@ type Screen = "home" | "auth" | "creator" | "loading";
 
 type GameJob = {
   game_id: string;
-  status: "generating" | "ready" | "failed";
+  status: "generating" | "ready" | "failed" | "cancelled";
   game_url?: string;
+  name?: string;
   error?: string;
+  stage?: string | null;
 };
 
 const MIME_TYPES = [
@@ -22,9 +24,23 @@ const MIME_TYPES = [
   "audio/ogg;codecs=opus",
 ];
 
+function wantsRecordPage() {
+  return new URLSearchParams(window.location.search).get("screen") === "record";
+}
+
+function readGuest() {
+  return sessionStorage.getItem("grow-a-game:guest") === "1";
+}
+
+function writeGuest(value: boolean) {
+  if (value) sessionStorage.setItem("grow-a-game:guest", "1");
+  else sessionStorage.removeItem("grow-a-game:guest");
+}
+
 export function App() {
-  const [screen, setScreen] = useState<Screen>("home");
+  const [screen, setScreen] = useState<Screen>(wantsRecordPage() ? "creator" : "home");
   const [session, setSession] = useState<Session | null>(null);
+  const [guest, setGuest] = useState(readGuest);
   const [authReady, setAuthReady] = useState(false);
   const [recording, setRecording] = useState(false);
   const [microphoneStream, setMicrophoneStream] = useState<MediaStream | null>(null);
@@ -32,25 +48,37 @@ export function App() {
   const [transcript, setTranscript] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
+  const [stage, setStage] = useState("Starting generation…");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<number | null>(null);
+  const activeGameRef = useRef<string | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!supabase) {
       setAuthReady(true);
+      if (wantsRecordPage()) setScreen(readGuest() ? "creator" : "home");
       return;
     }
 
     void supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      if (data.session) setScreen("creator");
+      if (data.session) {
+        writeGuest(false);
+        setGuest(false);
+      }
+      if (wantsRecordPage()) setScreen(data.session || readGuest() ? "creator" : "auth");
       setAuthReady(true);
     });
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      if (nextSession) {
+        writeGuest(false);
+        setGuest(false);
+      }
       setScreen((current) => {
         if (nextSession && current === "auth") return "creator";
-        if (!nextSession && current === "creator") return "auth";
+        if (!nextSession && current === "creator" && !readGuest()) return "auth";
         return current;
       });
     });
@@ -92,8 +120,14 @@ export function App() {
         setMicrophoneStream(null);
         if (timerRef.current) window.clearInterval(timerRef.current);
         setRecording(false);
-        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-        await transcribeRecording(blob);
+        try {
+          const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+          const wav = await recordingToWav(blob);
+          await transcribeRecording(wav);
+        } catch (reason) {
+          setTranscribing(false);
+          setError(reason instanceof Error ? reason.message : "The recording could not be prepared.");
+        }
       });
 
       setTranscript("");
@@ -118,7 +152,7 @@ export function App() {
   async function transcribeRecording(recordingBlob: Blob) {
     setTranscribing(true);
     const data = new FormData();
-    data.append("audio", recordingBlob, recordingName(recordingBlob.type));
+    data.append("audio", recordingBlob, "recording.wav");
 
     try {
       const response = await fetch("/api/transcribe", {
@@ -145,6 +179,7 @@ export function App() {
     }
 
     setError("");
+    setStage("Sending your idea…");
     setScreen("loading");
     const data = new FormData();
     data.append("prompt", prompt);
@@ -156,46 +191,79 @@ export function App() {
       });
       const job = (await response.json()) as GameJob & { detail?: string };
       if (!response.ok) throw new Error(job.detail || "Generation could not start.");
+      activeGameRef.current = job.game_id;
+      if (job.stage) setStage(job.stage);
       await pollJob(job.game_id);
     } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      if (activeGameRef.current === null) return;
       setError(reason instanceof Error ? reason.message : "Generation failed.");
       setScreen("creator");
     }
   }
 
   async function pollJob(gameId: string) {
-    for (;;) {
-      const response = await fetch(`/api/games/${gameId}/status`);
-      const job = (await response.json()) as GameJob;
-      if (job.status === "ready" && job.game_url) {
-        rememberGame(session?.user.id, job);
-        window.location.assign(job.game_url);
-        return;
+    const abort = new AbortController();
+    pollAbortRef.current = abort;
+    try {
+      for (;;) {
+        const response = await fetch(`/api/games/${gameId}/status`, { signal: abort.signal });
+        const job = (await response.json()) as GameJob;
+        if (job.stage) setStage(job.stage);
+        if (abort.signal.aborted || activeGameRef.current !== gameId) return;
+        if (job.status === "cancelled") return;
+        if (job.status === "ready" && job.game_url) {
+          rememberGame(session?.user.id, job);
+          window.location.assign(job.game_url);
+          return;
+        }
+        if (job.status === "failed") {
+          throw new Error(job.error || "Grok could not build this game.");
+        }
+        await wait(1000, abort.signal);
       }
-      if (job.status === "failed") {
-        throw new Error(job.error || "Grok could not build this game.");
-      }
-      await wait(1000);
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      throw reason;
+    } finally {
+      if (pollAbortRef.current === abort) pollAbortRef.current = null;
     }
+  }
+
+  function cancelGeneration() {
+    const gameId = activeGameRef.current;
+    activeGameRef.current = null;
+    pollAbortRef.current?.abort();
+    if (gameId) {
+      void fetch(`/api/games/${gameId}/cancel`, { method: "POST" }).catch(() => {});
+    }
+    setScreen("creator");
   }
 
   return (
     <main className="experience">
       {screen === "home" && (
         <HomeScreen
-          onStart={() => setScreen(authReady && session ? "creator" : "auth")}
+          onStart={() => setScreen(authReady && (session || guest) ? "creator" : "auth")}
         />
       )}
       {screen === "auth" && (
         <AuthScreen
           onAuthenticated={(nextSession) => {
+            writeGuest(false);
+            setGuest(false);
             setSession(nextSession);
+            setScreen("creator");
+          }}
+          onGuest={() => {
+            writeGuest(true);
+            setGuest(true);
             setScreen("creator");
           }}
           onBack={() => setScreen("home")}
         />
       )}
-      {screen === "creator" && session && (
+      {screen === "creator" && (session || guest) && (
         <CreatorScreen
           elapsed={elapsed}
           error={error}
@@ -204,16 +272,27 @@ export function App() {
           transcript={transcript}
           transcribing={transcribing}
           session={session}
+          guest={guest}
           onRecord={toggleRecording}
           onSubmit={submitTranscript}
+          onHome={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("screen");
+            window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+            setScreen("home");
+          }}
           onSignOut={async () => {
+            writeGuest(false);
+            setGuest(false);
             await supabase?.auth.signOut();
             setSession(null);
             setScreen("auth");
           }}
         />
       )}
-      {screen === "loading" && <LoadingScreen />}
+      {screen === "loading" && (
+        <LoadingScreen stage={stage} onCancel={cancelGeneration} />
+      )}
     </main>
   );
 }
@@ -251,9 +330,11 @@ type CreatorScreenProps = {
   recording: boolean;
   transcript: string;
   transcribing: boolean;
-  session: Session;
+  session: Session | null;
+  guest: boolean;
   onRecord: () => void;
   onSubmit: () => void;
+  onHome: () => void;
   onSignOut: () => void;
 };
 
@@ -265,19 +346,54 @@ function CreatorScreen({
   transcript,
   transcribing,
   session,
+  guest,
   onRecord,
   onSubmit,
+  onHome,
   onSignOut,
 }: CreatorScreenProps) {
   const [showGames, setShowGames] = useState(false);
-  const games = readStoredGames(session.user.id);
+  const [games, setGames] = useState(() => (session ? readStoredGames(session.user.id) : []));
+
+  useEffect(() => {
+    if (!session) {
+      setGames([]);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      games.map(async (game) => {
+        if (game.name) return game;
+        try {
+          const response = await fetch(`/games/${game.gameId}/metadata.json`);
+          if (!response.ok) return game;
+          const metadata = (await response.json()) as { name?: string };
+          return metadata.name ? { ...game, name: metadata.name } : game;
+        } catch {
+          return game;
+        }
+      }),
+    ).then((next) => {
+      if (cancelled || next.every((game, index) => game.name === games[index]?.name)) return;
+      writeStoredGames(session.user.id, next);
+      setGames(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id]);
 
   return (
     <section className="screen creator-screen">
       <header className="creator-nav">
-        <button type="button" onClick={() => setShowGames((visible) => !visible)}>
-          Stored games
-        </button>
+        <div className="creator-nav-actions">
+          <button type="button" onClick={onHome}>Home</button>
+          {!guest && (
+            <button type="button" onClick={() => setShowGames((visible) => !visible)}>
+              Stored games
+            </button>
+          )}
+        </div>
         <div>
           <BotAvatar
             type="droid"
@@ -288,12 +404,12 @@ function CreatorScreen({
             shading="plastic"
             seed={0.38}
           />
-          <span>{session.user.email}</span>
-          <button type="button" onClick={onSignOut}>Sign out</button>
+          <span>{guest ? "Guest" : session?.user.email}</span>
+          <button type="button" onClick={onSignOut}>{guest ? "Sign in" : "Sign out"}</button>
         </div>
       </header>
 
-      {showGames && (
+      {showGames && !guest && (
         <aside className="games-panel">
           <div>
             <p className="creator-kicker">YOUR LIBRARY</p>
@@ -305,7 +421,7 @@ function CreatorScreen({
             <ul>
               {games.map((game) => (
                 <li key={game.gameId}>
-                  <a href={game.url}>Generated game</a>
+                  <a href={game.url}>{game.name || "Untitled game"}</a>
                   <time>{new Date(game.createdAt).toLocaleDateString()}</time>
                 </li>
               ))}
@@ -317,14 +433,15 @@ function CreatorScreen({
       )}
 
       <div className="creator-main">
-        <h1>Let Grok build your story.</h1>
+        <h1>Let us build your story.</h1>
+        <div className="voice-composer-glow">
         <VoiceBeam
           className="voice-composer-beam"
           type="default"
           stream={microphoneStream}
           processing={transcribing}
           active={recording || transcribing}
-          idle={0}
+          idle={0.32}
           sensitivity={3.4}
           threshold={0.012}
           reach={1.45}
@@ -369,23 +486,90 @@ function CreatorScreen({
             </div>
           </div>
         </VoiceBeam>
+        </div>
       </div>
     </section>
   );
 }
 
-function LoadingScreen() {
+function LoadingScreen({
+  stage,
+  onCancel,
+}: {
+  stage: string;
+  onCancel: () => void;
+}) {
   return (
-    <section className="screen loading-screen" aria-label="Building your game">
-      <ThinkingOrb state="solving" size={64} theme="light" />
+    <section className="screen loading-screen" aria-label="Building your game" aria-live="polite">
+      <div className="loading-orb">
+        <ThinkingOrb state="solving" size={64} theme="light" />
+      </div>
+      <p className="loading-stage">{stage}</p>
+      <button className="loading-cancel" type="button" onClick={onCancel}>
+        Cancel
+      </button>
     </section>
   );
 }
 
-function recordingName(mimeType: string) {
-  if (mimeType.includes("mp4")) return "recording.m4a";
-  if (mimeType.includes("ogg")) return "recording.ogg";
-  return "recording.webm";
+const STT_SAMPLE_RATES = [8000, 16000, 22050, 24000, 44100, 48000];
+
+async function recordingToWav(recording: Blob) {
+  const context = new AudioContext();
+  try {
+    const decoded = await context.decodeAudioData(await recording.arrayBuffer());
+    const sampleRate = STT_SAMPLE_RATES.includes(decoded.sampleRate) ? decoded.sampleRate : 16000;
+    const audio = sampleRate === decoded.sampleRate ? decoded : await resample(decoded, sampleRate);
+    return encodeWav(audio);
+  } finally {
+    await context.close();
+  }
+}
+
+function resample(buffer: AudioBuffer, sampleRate: number) {
+  const length = Math.max(1, Math.round(buffer.duration * sampleRate));
+  const offline = new OfflineAudioContext(buffer.numberOfChannels, length, sampleRate);
+  const source = offline.createBufferSource();
+  source.buffer = buffer;
+  source.connect(offline.destination);
+  source.start();
+  return offline.startRendering();
+}
+
+function encodeWav(buffer: AudioBuffer) {
+  const channels = buffer.numberOfChannels;
+  const length = buffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = channels * bytesPerSample;
+  const dataSize = length * blockAlign;
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+  const write = (offset: number, text: string) => {
+    for (let index = 0; index < text.length; index += 1) view.setUint8(offset + index, text.charCodeAt(index));
+  };
+  write(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  write(8, "WAVE");
+  write(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, buffer.sampleRate, true);
+  view.setUint32(28, buffer.sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const pcm = new Int16Array(length * channels);
+  const channelData = Array.from({ length: channels }, (_, channel) => buffer.getChannelData(channel));
+  for (let index = 0; index < length; index += 1) {
+    for (let channel = 0; channel < channels; channel += 1) {
+      const sample = Math.max(-1, Math.min(1, channelData[channel][index]));
+      pcm[index * channels + channel] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    }
+  }
+  return new Blob([header, pcm], { type: "audio/wav" });
 }
 
 function formatTime(totalSeconds: number) {
@@ -394,13 +578,28 @@ function formatTime(totalSeconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function wait(milliseconds: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+function wait(milliseconds: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = window.setTimeout(resolve, milliseconds);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }
 
 type StoredGame = {
   gameId: string;
   url: string;
+  name?: string;
   createdAt: string;
 };
 
@@ -416,6 +615,10 @@ function readStoredGames(userId: string): StoredGame[] {
   }
 }
 
+function writeStoredGames(userId: string, games: StoredGame[]) {
+  localStorage.setItem(storageKey(userId), JSON.stringify(games.slice(0, 24)));
+}
+
 function rememberGame(userId: string | undefined, job: GameJob) {
   if (!userId || !job.game_url) return;
   const games = readStoredGames(userId);
@@ -423,7 +626,8 @@ function rememberGame(userId: string | undefined, job: GameJob) {
   games.unshift({
     gameId: job.game_id,
     url: job.game_url,
+    name: job.name?.trim() || undefined,
     createdAt: new Date().toISOString(),
   });
-  localStorage.setItem(storageKey(userId), JSON.stringify(games.slice(0, 24)));
+  writeStoredGames(userId, games);
 }

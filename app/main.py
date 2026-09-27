@@ -28,7 +28,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app import art, tester
+from app import art, phones, tester
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -139,6 +139,35 @@ REVIEW_SCHEMA = {
 }
 
 app = FastAPI(title="Grow-a-Game", version="0.3.0")
+
+
+@app.get("/static/kit.js", include_in_schema=False)
+async def kit_script() -> FileResponse:
+    return FileResponse(
+        WEB_DIR / "kit.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/static/styles.css", include_in_schema=False)
+async def site_styles() -> FileResponse:
+    return FileResponse(
+        WEB_DIR / "styles.css",
+        media_type="text/css",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/static/controller.js", include_in_schema=False)
+async def controller_script() -> FileResponse:
+    return FileResponse(
+        WEB_DIR / "controller.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 app.mount("/games", StaticFiles(directory=GAMES_DIR, html=True), name="games")
 
@@ -182,7 +211,10 @@ async def brand_logo() -> FileResponse:
 
 @app.get("/controller", include_in_schema=False)
 async def controller() -> FileResponse:
-    return FileResponse(WEB_DIR / "controller.html")
+    return FileResponse(
+        WEB_DIR / "controller.html",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/health")
@@ -198,7 +230,10 @@ async def transcribe_audio(audio: UploadFile = File(...)) -> dict[str, str]:
     try:
         with audio_path.open("wb") as target:
             shutil.copyfileobj(audio.file, target)
-        text = await transcribe(audio_path)
+        try:
+            text = await transcribe(audio_path)
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
         if not text:
             raise HTTPException(422, "The recording did not contain speech.")
         return {"text": text}
@@ -246,6 +281,7 @@ async def game_status(game_id: str) -> dict[str, Any]:
 
     response = dict(job)
     if metadata:
+        response["name"] = metadata.get("name")
         response["version"] = metadata.get("version", 1)
         response["repairs"] = metadata.get("repairs", 0)
         response["quality"] = metadata.get("quality")
@@ -262,6 +298,25 @@ async def game_status(game_id: str) -> dict[str, Any]:
             }
         )
     return response
+
+
+@app.post("/api/games/{game_id}/cancel")
+async def cancel_game(game_id: str) -> dict[str, str]:
+    job = jobs.get(game_id)
+    if not job:
+        raise HTTPException(404, "Unknown game ID.")
+    job["cancelled"] = True
+    if job["status"] == "generating":
+        job["status"] = "cancelled"
+        job["stage"] = "Cancelled"
+    return {"status": str(job["status"])}
+
+
+@app.post("/api/games/{game_id}/phones")
+async def push_controllers_to_phones(game_id: str) -> dict[str, Any]:
+    if not read_metadata(game_id):
+        raise HTTPException(404, "Unknown game ID.")
+    return phones.send_controllers(game_id)
 
 
 @app.post("/api/games/{game_id}/errors")
@@ -344,16 +399,26 @@ async def build_game(
     try:
         transcript = supplied_prompt
         if audio_path:
+            job["stage"] = "Listening to your idea…"
             transcript = await transcribe(audio_path)
         if not transcript:
             raise ValueError("The recording did not contain a game prompt.")
         job["transcript"] = transcript
+        if job.get("cancelled"):
+            job["status"] = "cancelled"
+            job["stage"] = None
+            return
 
         if not XAI_API_KEY:
+            job["stage"] = "Building a playable demo…"
             write_package(game_id, transcript, demo_package(), design="")
         else:
             job["stage"] = "Looking up existing sprites…"
             choice = await find_existing_sprites(transcript)
+            if job.get("cancelled"):
+                job["status"] = "cancelled"
+                job["stage"] = None
+                return
             if choice["source"] == "kit":
                 design = choice["brief"]
             else:
@@ -362,14 +427,27 @@ async def build_game(
                 images = await art.render_pieces(XAI_API_KEY, pieces)
                 pieces = [piece for piece in pieces if piece["id"] in images]
                 design = art.art_brief(game_id, pieces) if pieces else ""
+            if job.get("cancelled"):
+                job["status"] = "cancelled"
+                job["stage"] = None
+                return
             job["stage"] = "Writing the game…"
             package = await generate_package(transcript, design)
+            job["stage"] = "Saving the game files…"
             write_package(game_id, transcript, package, design=design)
             if choice["source"] != "kit" and images:
                 art.save_art(GAMES_DIR / game_id, images)
+            if job.get("cancelled"):
+                job["status"] = "cancelled"
+                job["stage"] = None
+                return
             await refine(
                 game_id, transcript, design, package, job, rounds=MAX_TEST_ROUNDS, review=False
             )
+            if job.get("cancelled"):
+                job["status"] = "cancelled"
+                job["stage"] = None
+                return
             if not _playable(read_report(game_id)):
                 job["stage"] = "Rewriting the game so it actually starts…"
                 failures = read_report(game_id).get("problems") or ["the first version was unplayable"]
@@ -382,7 +460,15 @@ async def build_game(
                 await refine(
                     game_id, transcript, design, package, job, rounds=1, review=False
                 )
+        if job.get("cancelled"):
+            job["status"] = "cancelled"
+            job["stage"] = None
+            return
         job["status"] = "ready"
+        job["stage"] = "Opening the game…"
+        if not os.getenv("PYTEST_CURRENT_TEST"):
+            job["stage"] = "Sending controllers to your phones…"
+            phones.send_controllers(game_id)
         job["stage"] = None
     except Exception as exc:
         job["status"] = "failed"
@@ -567,6 +653,8 @@ async def refine(
     reviews = 0
     report_summary: dict[str, Any] = {}
     for round_number in range(1, rounds + 1):
+        if job.get("cancelled"):
+            break
         if problems:
             job["stage"] = f"Fixing {plural(len(problems), 'problem')} (round {round_number} of {rounds})…"
             try:
@@ -648,16 +736,24 @@ async def transcribe(audio_path: Path) -> str:
         )
     headers = {"Authorization": f"Bearer {XAI_API_KEY}"}
     data = {"model": XAI_STT_MODEL, "language": "en", "format": "true"}
-    async with httpx.AsyncClient(timeout=120) as client:
-        with audio_path.open("rb") as audio_file:
-            response = await client.post(
-                "https://api.x.ai/v1/stt",
-                headers=headers,
-                data=data,
-                files={"file": (audio_path.name, audio_file)},
-            )
-    response.raise_for_status()
-    return response.json()["text"].strip()
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            with audio_path.open("rb") as audio_file:
+                response = await client.post(
+                    "https://api.x.ai/v1/stt",
+                    headers=headers,
+                    data=data,
+                    files={"file": (audio_path.name, audio_file)},
+                )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text.strip()[:300] or exc.response.reason_phrase
+        raise RuntimeError(
+            f"Transcription service returned {exc.response.status_code}: {detail}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"Transcription service could not be reached: {exc}") from exc
+    return str(response.json().get("text") or "").strip()
 
 
 def game_prompt() -> str:
@@ -999,9 +1095,9 @@ def game_html(name: str) -> str:
 <body class="game-page">
   <div id="game"></div>
   <div class="game-hud">
+    <a class="game-back" href="/?screen=record">← Record</a>
     <strong>{safe_name}</strong>
     <span id="connection">Connecting controllers…</span>
-    <a href="/">Console</a>
   </div>
   <script type="importmap">{{"imports":{{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}}}</script>
   <script type="module">import {{ boot }} from "/static/kit.js"; boot();</script>
