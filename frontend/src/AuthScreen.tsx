@@ -58,6 +58,7 @@ export function AuthScreen({ onAuthenticated, onBack }: AuthScreenProps) {
             face="mouth"
             state={busy ? "working" : "default"}
             size={96}
+            color="#f2a64a"
             theme="dark"
             shading="plastic"
             whirl={0.7}
@@ -97,7 +98,8 @@ export function AuthScreen({ onAuthenticated, onBack }: AuthScreenProps) {
             <BorderBeam
               className="auth-beam"
               size="md"
-              colorVariant="colorful"
+              colorVariant="sunset"
+              staticColors
               strength={0.85}
               active={!busy}
               theme="dark"
