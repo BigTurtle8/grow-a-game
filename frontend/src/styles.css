@@ -119,8 +119,8 @@ button {
   grid-template-columns: minmax(0, 1.05fr) minmax(420px, 0.95fr);
   color: #f7f5ef;
   background:
-    radial-gradient(circle at 22% 42%, rgba(87, 105, 255, 0.24), transparent 34%),
-    #090a0e;
+    radial-gradient(circle at 22% 42%, rgba(255, 255, 255, 0.055), transparent 34%),
+    #000000;
   font-family: "Inter", sans-serif;
 }
 
@@ -178,16 +178,16 @@ button {
   align-self: center;
   width: min(520px, calc(100% - 64px));
   padding: clamp(32px, 5vw, 64px);
-  border: 1px solid #353741;
+  border: 1px solid #303030;
   border-radius: 26px;
-  background: rgba(22, 23, 29, 0.94);
+  background: rgba(15, 15, 15, 0.96);
   box-shadow: 0 32px 100px #0008;
 }
 
 .auth-eyebrow,
 .creator-kicker {
   margin: 0 0 18px;
-  color: #8f92a1;
+  color: #8f8f8f;
   font: 600 11px/1 "Inter", sans-serif;
   letter-spacing: 0.18em;
 }
@@ -217,24 +217,24 @@ button {
 
 .auth-card label {
   gap: 9px;
-  color: #c5c6ce;
+  color: #c7c7c7;
   font-size: 13px;
 }
 
 .auth-card input {
   width: 100%;
   padding: 15px 16px;
-  border: 1px solid #464852;
+  border: 1px solid #404040;
   border-radius: 10px;
   outline: 0;
   color: #ffffff;
-  background: #0c0d11;
+  background: #050505;
   font: inherit;
 }
 
 .auth-card input:focus {
-  border-color: #8e9cff;
-  box-shadow: 0 0 0 3px #6d7bff24;
+  border-color: #f2b45c;
+  box-shadow: 0 0 0 3px #f2b45c24;
 }
 
 .auth-beam {
@@ -245,16 +245,16 @@ button {
 .auth-submit {
   width: 100%;
   min-height: 54px;
-  border: 1px solid #484a56;
+  border: 1px solid #454545;
   border-radius: 12px;
   color: #ffffff;
-  background: linear-gradient(180deg, #1c1e26, #101116);
+  background: linear-gradient(180deg, #202020, #0d0d0d);
   font: 600 14px/1 "Inter", sans-serif;
   cursor: pointer;
 }
 
 .auth-submit:hover {
-  background: linear-gradient(180deg, #262936, #15171e);
+  background: linear-gradient(180deg, #2c241b, #15110d);
 }
 
 .auth-submit:disabled {
@@ -266,7 +266,7 @@ button {
   margin-top: 24px;
   padding: 0;
   border: 0;
-  color: #aab2ff;
+  color: #f0bc74;
   background: transparent;
   cursor: pointer;
 }
